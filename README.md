@@ -1,0 +1,465 @@
+<p align="center">
+  <a href="https://github.com/mrbagels/ledger">
+    <img src="./assets/ledger.svg" alt="Ledger notebook icon" width="128" height="128">
+  </a>
+</p>
+
+<h1 align="center">Ledger</h1>
+
+<p align="center">
+  <strong>Repo-native change memory for humans and coding agents.</strong>
+</p>
+
+<p align="center">
+  Agents sign in, do the work, and leave a durable record for the next person
+  or agent who touches the codebase.
+</p>
+
+<p align="center">
+  <a href="https://github.com/mrbagels/ledger/actions/workflows/ci.yml?query=branch%3Amaster">
+    <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/mrbagels/ledger/ci.yml?branch=master&style=for-the-badge&label=CI">
+  </a>
+  <a href="https://github.com/mrbagels/ledger/blob/master/package.json">
+    <img alt="Version" src="https://img.shields.io/github/package-json/v/mrbagels/ledger?style=for-the-badge&label=version">
+  </a>
+  <a href="https://github.com/mrbagels/ledger/blob/master/LICENSE">
+    <img alt="License" src="https://img.shields.io/github/license/mrbagels/ledger?style=for-the-badge">
+  </a>
+  <img alt="Node" src="https://img.shields.io/badge/node-%3E%3D20-43853D?style=for-the-badge&logo=node.js&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/typescript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white">
+  <img alt="Markdown source" src="https://img.shields.io/badge/source-markdown-111111?style=for-the-badge&logo=markdown&logoColor=white">
+</p>
+
+---
+
+Ledger is an agent-first CLI and TypeScript library for keeping implementation
+history, backlog, durable decisions, release notes, verification records,
+invariants, docs impact, and merge-conflict guidance inside your repository.
+
+The primary design target is coding agents: compact retrieval, MCP tools,
+conflict guidance, docs impact checks, and durable handoff records that survive
+between sessions. Human use is fully supported through the CLI and generated
+reader, but the structure is intentionally optimized so agents can read, query,
+and act on the history without guessing from Git alone.
+
+The source of truth is plain Markdown under `.ledger/`. Generated indexes,
+reports, release notes, and a static reader make those records useful for
+automation without making the project dependent on a hosted service.
+
+## At A Glance
+
+| Question | Answer |
+| --- | --- |
+| What is it? | A structured change memory layer for software repos. |
+| Primary audience | Coding agents that need durable implementation memory. |
+| Human workflow | Fully available through the CLI, Markdown records, reports, and static reader. |
+| Source format | Markdown with YAML frontmatter. |
+| Default root | `.ledger/` |
+| Runtime | Node >=20 |
+| Outputs | JSON indexes, validation reports, docs reports, release records, static HTML. |
+| Product boundary | Ledger stands alone. It can later export into Dossier or other renderers. |
+
+## Why Ledger Exists
+
+Traditional changelogs answer what shipped. Ledger answers what future
+maintainers and agents need before changing the code again:
+
+- what changed
+- why the change exists
+- which files, symbols, docs, decisions, and backlog items are related
+- what invariants must survive future refactors
+- what verification proved the behavior
+- what to preserve if the same area conflicts during a merge
+- which release carried the work
+
+Git history tells you what happened. Ledger tells you what matters.
+
+## Five Minute Start
+
+### Work From This Repo Today
+
+```bash
+git clone https://github.com/mrbagels/ledger.git
+cd ledger
+npm ci
+npm run build
+npm link
+
+ledger version
+```
+
+You can also run the CLI without linking:
+
+```bash
+node dist/cli.js version
+```
+
+### Initialize Ledger In A Project
+
+```bash
+cd /path/to/your-project
+ledger init --with-docs
+```
+
+This creates:
+
+```txt
+.ledger/
+  config.yaml
+  entries/
+  backlog/
+  decisions/
+  releases/
+  templates/
+  policies/
+
+docs/
+  README.md
+  llm/
+```
+
+### Record A Change
+
+```bash
+git status --short
+ledger new "Add provider reconnect guard" --from-diff --area runtime
+```
+
+Ledger drafts a Markdown entry with changed files, detected TypeScript or
+Markdown symbols, inferred areas, docs impact prompts, and a per-file conflict
+checklist.
+
+Open the generated file, finish the narrative, then run:
+
+```bash
+ledger validate
+ledger ci
+```
+
+### Build The Local Reader
+
+```bash
+ledger index
+ledger render
+open .ledger/dist/index.html
+```
+
+The static reader is a single offline HTML file. It gives humans and agents a
+searchable, faceted view of entries, decisions, backlog, releases, invariants,
+verification checks, relationships, and raw Markdown source.
+
+### Published Package Shape
+
+Ledger is intended to publish as the scoped public package
+`@mrbagels/ledger`. The scoped name avoids collisions with unrelated unscoped
+`ledger` packages and supports direct one-off CLI usage:
+
+```bash
+pnpm dlx @mrbagels/ledger init --with-docs
+pnpm dlx @mrbagels/ledger ci
+npx @mrbagels/ledger init --with-docs
+```
+
+For a project-local install:
+
+```bash
+npm install --save-dev @mrbagels/ledger
+npx ledger init --with-docs
+npx ledger ci
+```
+
+The package builds from source during `prepare`; release checks use
+`npm run release:build`.
+
+After the Homebrew tap is published, macOS users can install with:
+
+```bash
+brew tap mrbagels/tap
+brew install ledger
+```
+
+## What Ledger Creates
+
+| Path | Purpose |
+| --- | --- |
+| `.ledger/entries/` | Landed change records. |
+| `.ledger/backlog/` | Accepted or proposed future work. |
+| `.ledger/decisions/` | Durable project decisions. |
+| `.ledger/releases/` | Release records generated from entries or maintained by hand. |
+| `.ledger/templates/` | Project-local templates for new records. |
+| `.ledger/policies/` | Policy files such as git coverage requirements. |
+| `.ledger/indexes/` | Generated JSON indexes. |
+| `.ledger/reports/` | Validation, docs, coverage, and impact reports. |
+| `.ledger/dist/` | Generated static reader output. |
+| `docs/` | Optional durable project docs scaffold managed alongside Ledger records. |
+
+## Command Map
+
+| Command | What It Does |
+| --- | --- |
+| `ledger init --with-docs` | Creates `.ledger/` and optional `docs/` scaffolding. |
+| `ledger init --migrate` | Creates a partial-adoption scaffold for replacing an existing changelog or docs workflow. |
+| `ledger adopt` | Initializes Ledger for an established repo without claiming ownership of the whole docs tree. |
+| `ledger new "Title" --from-diff` | Drafts a change entry from git status. |
+| `ledger feedback "Title"` | Captures dogfood or product feedback as a first-class product note. |
+| `ledger validate` | Parses and validates Ledger source documents. Supports `--current-only`, `--update-baseline`, and `--no-baseline`. |
+| `ledger index` | Writes JSON indexes under `.ledger/indexes/`. |
+| `ledger verify-integrity` | Writes record and catalog hashes for provenance checks. |
+| `ledger render` | Builds the static HTML reader. |
+| `ledger coverage --explain` | Checks that changed source paths have Ledger coverage and explains required, ignored, covered, and missing paths. |
+| `ledger docs audit` | Finds missing and unreferenced durable docs links. |
+| `ledger docs classify <path>` | Classifies docs as durable, routing, scratch, generated, or unknown. |
+| `ledger docs impact --check` | Fails when source changes lack docs impact. |
+| `ledger docs reconcile` | Regenerates the docs routing manifest and `START_HERE.md` from the docs audit. |
+| `ledger docs migrate` | Writes a docs migration report with cleanup guidance. |
+| `ledger explain <path>` | Shows records related to a file. |
+| `ledger explain <path> --agent` | Emits compact agent context for a file. |
+| `ledger packet <path> --write-report` | Builds a compact agent handoff packet, optionally writing `.ledger/reports/packet.md`. |
+| `ledger mcp` | Starts a stdio MCP server for agent tools. |
+| `ledger conflict <path> --write-report` | Extracts conflict rules, invariants, and verification, optionally writing `.ledger/reports/conflict.md`. |
+| `ledger query --kind change --area cli --symbol run --text retry` | Filters records by kind, area, status, release, relationship, symbol, file, doc, id, or metadata text. |
+| `ledger unreleased` | Lists landed or shipped changes not assigned to a release. |
+| `ledger release v0.1.1 --include-unreleased --assign --status released --write` | Assigns selected entries and writes a release record. |
+| `ledger migrate changelog <dir> --rewrite-docs` | Migrates legacy Markdown changelog records into `.ledger/entries` and writes a receipt. |
+| `ledger agents` | Prints ready-to-paste `AGENTS.md` instructions for the configured workflow. |
+| `ledger ci` | Runs validation, docs audit, coverage, and docs impact together. |
+
+Every command has focused help:
+
+```bash
+ledger help
+ledger help new
+ledger docs impact --help
+ledger release --help
+```
+
+## Adoption And Migration
+
+Established repos can use partial docs adoption:
+
+```bash
+ledger adopt
+ledger migrate changelog docs/changelog --rewrite-docs
+ledger validate --current-only
+```
+
+`ledger migrate changelog <dir>` reads Markdown records, preserves IDs when
+possible, writes duplicate-ID suggestions in a migration receipt, and maps
+frontmatter plus body sections into Ledger change entries. `--rewrite-docs`
+updates docs references from old changelog paths to the new `.ledger/entries`
+paths.
+
+For long-lived histories, mark migrated records with `status: "historical"` or
+acknowledge stale paths with `staleRefs`. Historical records stay queryable but
+do not flood validation with missing file warnings. Projects can also use
+`ledger validate --update-baseline` to baseline known warnings and
+`ledger validate --current-only` while actively changing current records.
+
+Entry `files` can use exact paths, globs such as `src/features/**`, or explicit
+`prefix:` and `glob:` patterns. `ledger new --from-diff` omits configured
+generated/vendor ignores and groups very large diffs into patterns.
+
+Dogfood findings and product observations belong in product notes:
+
+```bash
+ledger feedback "Improve changelog migration receipt" --area cli --tag dogfood
+```
+
+Project-specific metadata can be made strict with `schema.extensions` in
+`.ledger/config.yaml`, for example `phaseId: string` or `productAreas:
+string[]`.
+
+## Example Change Entry
+
+```markdown
+---
+id: "0020"
+kind: "change"
+title: "Overhaul README and prepare patch release"
+date: "2026-06-29"
+updated: "2026-06-29"
+status: "landed"
+areas: ["docs", "release"]
+files:
+  - "README.md"
+  - "package.json"
+symbols:
+  - "ledger release"
+docs:
+  - "docs/PRODUCT.md"
+commits: []
+release: "v0.1.1"
+---
+
+# 0020: Overhaul README And Prepare Patch Release
+
+## Summary
+
+Explain what changed.
+
+## Why
+
+Explain why it changed.
+
+## Changed Files
+
+### README.md
+
+- What changed: Reworked the public project landing page.
+- Anchor: `Five Minute Start`
+- On conflict: Keep the README accurate for the current install state.
+
+## Behavior And UX Impact
+
+Explain what users experience differently.
+
+## Invariants
+
+- Markdown remains the source of truth.
+- Generated outputs remain derived artifacts.
+
+## Verification
+
+- `npm run check`
+- `node dist/cli.js ci`
+```
+
+## Agent Workflow
+
+Ledger is designed to be useful to coding agents without special integration.
+
+Before editing:
+
+```bash
+ledger explain path/to/file.ts --agent
+ledger packet path/to/file.ts --write-report
+ledger conflict path/to/file.ts
+```
+
+After editing:
+
+```bash
+ledger new "Describe the change" --from-diff
+ledger ci
+```
+
+The entry should tell the next agent what changed, what must remain true, and
+how to verify the behavior.
+
+For MCP-capable agents, run Ledger as a stdio server:
+
+```bash
+ledger mcp
+```
+
+The server exposes tools for validation, query, file explanation, conflict
+guidance, agent packets, docs impact checks, and integrity verification.
+
+## Release Workflow
+
+Prepare a release record from entries already assigned to a version:
+
+```bash
+ledger release v0.1.1 --status released --date 2026-06-29 --write
+```
+
+Or preview currently unreleased work without writing:
+
+```bash
+ledger release v0.1.1 --include-unreleased --status planned
+```
+
+To promote currently unreleased landed work and write the release record in one
+step:
+
+```bash
+ledger release v0.1.1 --include-unreleased --assign --status released --write
+```
+
+The generated release document includes public notes, internal entry details,
+verification guidance, and known issues.
+
+## Docs Relationship
+
+Ledger does not replace full project documentation. It replaces the scattered
+implementation memory that often grows inside `docs/` without structure.
+
+Use:
+
+- `.ledger/` for change records, backlog, decisions, releases, invariants,
+  verification, and conflict rules
+- `docs/` for durable product, architecture, operations, API, guide, reference,
+  and agent routing docs
+
+Ledger can scaffold and audit `docs/`, but it does not try to become a docs CMS.
+`ledger docs reconcile` keeps agent routing files current, and
+`ledger docs migrate` reports scratch, generated, unknown, missing, and
+unreferenced docs that may need cleanup.
+
+## Integrity
+
+Use `ledger verify-integrity` to generate a deterministic SHA-256 hash for every
+Ledger source record plus a catalog hash for the current record set. Ledger
+writes `.ledger/indexes/integrity.json` for tools and
+`.ledger/reports/integrity.md` for review.
+
+## Library Usage
+
+The package exports the same core primitives used by the CLI:
+
+```ts
+import {
+  findWorkspace,
+  readLedgerDocuments,
+  validateDocuments,
+  buildIndexes,
+  createLedgerMcpServer,
+} from "ledger";
+} from "@mrbagels/ledger";
+
+const workspace = await findWorkspace(process.cwd());
+const documents = await readLedgerDocuments(workspace);
+const validation = validateDocuments(workspace, documents);
+const indexes = buildIndexes(workspace, documents);
+const mcpServer = createLedgerMcpServer({ cwd: process.cwd() });
+```
+
+Use the library when you want to build custom dashboards, agent context
+packets, release tooling, or renderer adapters.
+
+## Project Docs
+
+- [Product Brief](./docs/PRODUCT.md)
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Schema](./docs/SCHEMA.md)
+- [Ledger And Project Docs](./docs/DOCS_RELATIONSHIP.md)
+- [Roadmap](./docs/ROADMAP.md)
+- [Implementation Plan](./docs/IMPLEMENTATION_PLAN.md)
+
+## Development
+
+Development happens on `next`. Stable releases are promoted to `master`.
+
+```bash
+npm ci
+npm run ci
+```
+
+`npm run ci` runs typecheck, tests, build, Ledger's own CI checks, and an npm
+package dry run.
+
+Tagged releases use `.github/workflows/release.yml`. When `NPM_TOKEN` is set in
+repository secrets, pushing `vX.Y.Z` publishes the verified package to npm with
+provenance.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) and [SECURITY.md](./SECURITY.md).
+
+## Product Boundary
+
+Ledger stands on its own. It does not depend on Dossier or any renderer to be
+useful. Later, a separate adapter can export Ledger's normalized model into
+Dossier or another artifact system.
+
+## License
+
+[MIT](./LICENSE)

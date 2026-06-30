@@ -1,0 +1,64 @@
+{
+  "name": "@mrbagels/ledger",
+  "version": "0.1.10",
+  "description": "Repo-native change memory for humans and coding agents.",
+  "type": "module",
+  "keywords": [
+    "changelog",
+    "agents",
+    "markdown",
+    "ledger",
+    "developer-tools"
+  ],
+  "homepage": "https://github.com/mrbagels/ledger#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrbagels/ledger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mrbagels/ledger/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "ledger": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "assets",
+    "dist",
+    "README.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "docs/*.md",
+    ".ledger/templates/*.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
+    "prepare": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test",
+    "ledger:ci": "node dist/cli.js ci",
+    "pack:dry-run": "npm pack --dry-run",
+    "release:build": "npm run build && npm run pack:dry-run",
+    "ci": "npm run check && npm run build && npm run ledger:ci && npm run pack:dry-run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "yaml": "^2.8.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  },
+  "license": "MIT"
+}

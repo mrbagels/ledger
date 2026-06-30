@@ -1,0 +1,119 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { parseLedgerConfig, readLedgerConfig } from "../src/config.js";
+
+let tempDir: string | undefined;
+
+afterEach(async () => {
+  if (tempDir) {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = undefined;
+  }
+});
+
+describe("parseLedgerConfig", () => {
+  it("merges valid partial config with defaults", () => {
+    const config = parseLedgerConfig(
+      {
+        project: "fixture",
+        docs: {
+          managed: true,
+        },
+        git: {
+          requireEntryFor: ["src/**"],
+        },
+      },
+      "fixture.yaml",
+    );
+
+    expect(config.project).toBe("fixture");
+    expect(config.docs.managed).toBe(true);
+    expect(config.docs.root).toBe("docs");
+    expect(config.git.requireEntryFor).toEqual(["src/**"]);
+    expect(config.git.ignore).toContain("dist/**");
+  });
+
+  it("normalizes configured paths and glob patterns", () => {
+    const config = parseLedgerConfig(
+      {
+        source: {
+          entries: ".\\.ledger\\entries",
+        },
+        docs: {
+          root: ".\\docs",
+          routing: {
+            startHere: ".\\docs\\llm\\START_HERE.md",
+          },
+        },
+        git: {
+          requireEntryFor: [".\\src\\**"],
+          ignore: [".\\dist\\**"],
+        },
+      },
+      "fixture.yaml",
+    );
+
+    expect(config.source.entries).toBe(".ledger/entries");
+    expect(config.docs.root).toBe("docs");
+    expect(config.docs.routing.startHere).toBe("docs/llm/START_HERE.md");
+    expect(config.git.requireEntryFor).toEqual(["src/**"]);
+    expect(config.git.ignore).toEqual(["dist/**"]);
+  });
+
+  it("rejects non-object config", () => {
+    expect(() => parseLedgerConfig([], "fixture.yaml")).toThrow(
+      "fixture.yaml: config must be a YAML object",
+    );
+  });
+
+  it("rejects malformed nested config", () => {
+    expect(() =>
+      parseLedgerConfig(
+        {
+          docs: "docs",
+        },
+        "fixture.yaml",
+      ),
+    ).toThrow("fixture.yaml: docs must be an object");
+  });
+
+  it("rejects arrays with non-string values", () => {
+    expect(() =>
+      parseLedgerConfig(
+        {
+          git: {
+            requireEntryFor: ["src/**", 42],
+          },
+        },
+        "fixture.yaml",
+      ),
+    ).toThrow("fixture.yaml: git.requireEntryFor must be an array of strings");
+  });
+
+  it("rejects empty required section lists after merge", () => {
+    expect(() =>
+      parseLedgerConfig(
+        {
+          validation: {
+            requiredSections: {
+              change: [],
+            },
+          },
+        },
+        "fixture.yaml",
+      ),
+    ).toThrow("fixture.yaml: validation.requiredSections.change must not be empty");
+  });
+
+  it("prefixes YAML parse errors with the config path", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-config-test-"));
+    const configPath = path.join(tempDir, "config.yaml");
+    await writeFile(configPath, "project: [broken\n", "utf8");
+
+    await expect(readLedgerConfig(configPath)).rejects.toThrow(
+      `${configPath}: invalid YAML:`,
+    );
+  });
+});

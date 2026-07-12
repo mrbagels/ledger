@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.ledger/indexes/*.json
+.ledger/reports/*.md
+.ledger/dist/
+.ledger/transactions/
+.ledger/write.lock
+docs/llm/manifest.json
+docs/llm/START_HERE.md
+.DS_Store
+npm-debug.log*

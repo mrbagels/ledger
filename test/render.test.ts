@@ -20,7 +20,7 @@ describe("buildStaticReaderModel", () => {
   it("normalizes documents and counts kinds", () => {
     const model = buildStaticReaderModel(workspace(), [
       document("0001", "change", "Change"),
-      document("D001", "decision", "Decision"),
+      document("D001", "decision", "Decision", "2026-06-20"),
     ]);
 
     expect(model.project).toBe("ledger-project");
@@ -54,6 +54,28 @@ describe("buildStaticReaderModel", () => {
       target: "file:src/cli.ts",
       type: "file",
     });
+  });
+
+  it("orders documents date-descending with a numeric-aware id tiebreak", () => {
+    const model = buildStaticReaderModel(workspace(), [
+      document("v0.1.2", "release", "Second patch", "2026-05-10"),
+      document("v0.1.10", "release", "Tenth patch", "2026-05-10"),
+      document("0002", "change", "Newest change", "2026-07-01"),
+      document("v0.1.12", "release", "Twelfth patch", "2026-06-01"),
+    ]);
+
+    expect(model.documents.map((entry) => entry.id)).toEqual([
+      "0002",
+      "v0.1.12",
+      "v0.1.10",
+      "v0.1.2",
+    ]);
+    expect(model.searchIndex.map((entry) => entry.id)).toEqual([
+      "0002",
+      "v0.1.12",
+      "v0.1.10",
+      "v0.1.2",
+    ]);
   });
 
   it("creates a fail-closed public release model", () => {
@@ -329,12 +351,13 @@ function document(
   id: string,
   kind: "change" | "backlog" | "decision" | "release",
   title: string,
+  date = "2026-06-29",
 ): ParsedLedgerDocument {
   const raw = `---
 id: "${id}"
 kind: "${kind}"
 title: "${title}"
-date: "2026-06-29"
+date: "${date}"
 status: "landed"
 areas: ["cli"]
 files:

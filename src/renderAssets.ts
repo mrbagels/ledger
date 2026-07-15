@@ -1437,7 +1437,7 @@ export const staticReaderRuntime = `    let searchIndexPromise;
             .map((document) => ({ document, score: scoreSearchDocument(query, document) }))
             .filter((item) => item.score > 0)
             .sort((left, right) => right.score - left.score || left.document.id.localeCompare(right.document.id))
-        : source.slice(-8).reverse().map((document) => ({ document, score: 0 })))
+        : source.slice(0, 8).map((document) => ({ document, score: 0 })))
         .slice(0, 9);
       commandSelection = Math.min(commandSelection, Math.max(0, commandItems.length - 1));
       paletteResults.replaceChildren();

@@ -198,7 +198,11 @@ export function buildStaticReaderModel(
       };
       return profile === "public" ? publicDocument(rendered) : rendered;
     })
-    .sort((left, right) => left.id.localeCompare(right.id));
+    .sort(
+      (left, right) =>
+        right.date.localeCompare(left.date) ||
+        right.id.localeCompare(left.id, undefined, { numeric: true }),
+    );
 
   return {
     schemaVersion: 1,

@@ -312,10 +312,12 @@ behind the panel so readers can move between records without losing context.
 The few remaining container surfaces (search field, filter pills, graph
 summary, empty state) use a thin stroke outline with no background fill.
 Opaque surfaces and shadow are reserved for overlays: the search palette and
-the record panel. Decorative leading strokes remain excluded. The public
-changelog orders releases newest-first and renders large year group headings
-as pseudo-element labels on the first entry of each year, so the filter
-runtime can reorder rows without displacing separate marker elements. The
+the record panel. Decorative leading strokes remain excluded. The reader model orders
+documents newest-first, date descending with a numeric-aware identifier
+tiebreak, so DOM order, search index order, and the palette's recent-records
+list agree on both profiles. The public changelog renders large year group
+headings as pseudo-element labels on the first entry of each year, so the
+filter runtime can reorder rows without displacing separate marker elements. The
 stylesheet defines its color system once with CSS `light-dark()` tokens, so
 light and dark themes share one declaration, native controls follow the
 active `color-scheme`, and the select chevron is painted through a CSS mask

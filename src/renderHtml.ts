@@ -23,13 +23,7 @@ export function renderStaticReaderHtml(
     .filter((value) => value !== "__none");
   const tags = model.facets.tags.map((facet) => facet.value);
   const isPublic = model.profile === "public";
-  const documents = isPublic
-    ? [...model.documents].sort(
-        (left, right) =>
-          right.date.localeCompare(left.date) ||
-          right.id.localeCompare(left.id, undefined, { numeric: true }),
-      )
-    : model.documents;
+  const documents = model.documents;
 
   return `<!doctype html>
 <html lang="en" data-theme="system">

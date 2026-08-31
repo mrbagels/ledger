@@ -1,0 +1,399 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { defaultConfig } from "../src/config.js";
+import { parseMarkdownWithFrontmatter } from "../src/frontmatter.js";
+import { buildStaticReaderModel, renderStaticReaderHtml, writeStaticReader } from "../src/render.js";
+import type { LedgerWorkspace, ParsedLedgerDocument } from "../src/types.js";
+
+let tempDir: string | undefined;
+
+afterEach(async () => {
+  if (tempDir) {
+    await rm(tempDir, { recursive: true, force: true });
+    tempDir = undefined;
+  }
+});
+
+describe("buildStaticReaderModel", () => {
+  it("normalizes documents and counts kinds", () => {
+    const model = buildStaticReaderModel(workspace(), [
+      document("0001", "change", "Change"),
+      document("D001", "decision", "Decision", "2026-06-20"),
+    ]);
+
+    expect(model.project).toBe("ledger-project");
+    expect(model.profile).toBe("internal");
+    expect(model.stats.documents).toBe(2);
+    expect(model.stats.changes).toBe(1);
+    expect(model.stats.decisions).toBe(1);
+    expect(model.documents.map((entry) => entry.id)).toEqual(["0001", "D001"]);
+    expect(model.documents[0]?.summary).toBe("Summary.");
+    expect(model.documents[0]?.invariants).toEqual(["Keep this true."]);
+    expect(model.documents[0]?.verification).toEqual(["npm test"]);
+    expect(model.facets.kinds).toContainEqual({ value: "change", count: 1 });
+    expect(model.facets.areas).toContainEqual({ value: "cli", count: 2 });
+    expect(model.facets.releases).toContainEqual({ value: "v1.0.0", count: 2 });
+    expect(model.searchIndex[0]).toMatchObject({
+      id: "0001",
+      title: "Change",
+      fields: {
+        path: ".ledger/entries/0001.md",
+        files: "src/cli.ts",
+      },
+      terms: expect.stringContaining("src/cli.ts"),
+    });
+    expect(model.graph.nodes).toContainEqual({
+      id: "file:src/cli.ts",
+      label: "src/cli.ts",
+      type: "file",
+    });
+    expect(model.graph.edges).toContainEqual({
+      source: "record:0001",
+      target: "file:src/cli.ts",
+      type: "file",
+    });
+  });
+
+  it("orders documents date-descending with a numeric-aware id tiebreak", () => {
+    const model = buildStaticReaderModel(workspace(), [
+      document("v0.1.2", "release", "Second patch", "2026-05-10"),
+      document("v0.1.10", "release", "Tenth patch", "2026-05-10"),
+      document("0002", "change", "Newest change", "2026-07-01"),
+      document("v0.1.12", "release", "Twelfth patch", "2026-06-01"),
+    ]);
+
+    expect(model.documents.map((entry) => entry.id)).toEqual([
+      "0002",
+      "v0.1.12",
+      "v0.1.10",
+      "v0.1.2",
+    ]);
+    expect(model.searchIndex.map((entry) => entry.id)).toEqual([
+      "0002",
+      "v0.1.12",
+      "v0.1.10",
+      "v0.1.2",
+    ]);
+  });
+
+  it("creates a fail-closed public release model", () => {
+    const model = buildStaticReaderModel(
+      workspace(),
+      [
+        document("0001", "change", "Internal implementation"),
+        publicReleaseDocument("v1.0.0", "released"),
+        publicReleaseDocument("v2.0.0", "planned"),
+      ],
+      { profile: "public" },
+    );
+
+    expect(model.profile).toBe("public");
+    expect(model.documents).toHaveLength(1);
+    expect(model.documents[0]).toMatchObject({
+      id: "v1.0.0",
+      title: "Ledger v1.0.0",
+      source: "",
+      sourceHref: "",
+      path: "",
+      publicNotes: ["Safe public feature."],
+      files: [],
+      symbols: [],
+      issues: [],
+    });
+    expect(JSON.stringify(model)).not.toContain("src/private.ts");
+    expect(JSON.stringify(model)).not.toContain("Internal release detail");
+    expect(JSON.stringify(model)).not.toContain("Keep private behavior stable");
+    expect(model.searchIndex[0]?.publicNotes).toEqual(["Safe public feature."]);
+    expect(model.searchIndex[0]?.terms).toContain("Safe public feature.");
+    expect(model.graph.edges).toEqual([]);
+  });
+});
+
+describe("writeStaticReader", () => {
+  it("writes artifact metrics and budget status", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-render-test-"));
+    const testWorkspace = workspace(tempDir);
+    const result = await writeStaticReader(
+      testWorkspace,
+      buildStaticReaderModel(testWorkspace, [document("0001", "change", "Change")]),
+    );
+
+    expect(result.artifacts.map((artifact) => artifact.kind)).toEqual([
+      "html",
+      "search-index",
+      "graph",
+    ]);
+    expect(result.totalBytes).toBeGreaterThan(0);
+    expect(result.writeMs).toBeGreaterThanOrEqual(0);
+    expect(result.budget.ok).toBe(true);
+  });
+
+  it("writes public artifacts to an isolated directory", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-render-public-test-"));
+    const testWorkspace = workspace(tempDir);
+    const result = await writeStaticReader(
+      testWorkspace,
+      buildStaticReaderModel(
+        testWorkspace,
+        [
+          publicReleaseDocument("v1.0.0", "released"),
+          publicReleaseDocument("v0.9.0", "released", "2025-11-20"),
+        ],
+        { profile: "public" },
+      ),
+    );
+
+    expect(result.profile).toBe("public");
+    expect(result.outputPath).toBe(".ledger/dist/public/index.html");
+    const html = await readFile(path.join(tempDir, result.outputPath), "utf8");
+    expect(html).toContain("Safe public feature.");
+    expect(html).toContain("What shipped, clearly.");
+    expect(html).toContain("Search versions and release notes");
+    expect(html).toContain('data-year="2026"');
+    expect(html).toContain('data-year="2025"');
+    expect(html.indexOf('id="record-v1-0-0"')).toBeGreaterThan(-1);
+    expect(html.indexOf('id="record-v1-0-0"')).toBeLessThan(html.indexOf('id="record-v0-9-0"'));
+    expect(html.match(/class="entry release-entry year-start"/g)).toHaveLength(2);
+    expect(html).toContain("No matching releases");
+    expect(html).toContain("No releases yet");
+    expect(html).not.toContain("No matching records");
+    expect(html).toContain('class="version-badge"');
+    expect(html).toContain('<use href="#i-check"');
+    expect(html).toContain('id="per-page"');
+    expect(html).toContain('aria-label="Pagination"');
+    expect(html).not.toContain('data-density="compact"');
+    expect(html).not.toContain('class="filter-bar"');
+    expect(html).not.toContain('id="record-panel"');
+    expect(html).not.toContain('class="entry-link"');
+    expect(html).not.toContain('type="hidden"');
+    expect(html).not.toContain('data-filter-field="kind"');
+    expect(html).not.toContain("Markdown source");
+    expect(html).not.toContain("src/private.ts");
+    expect(html).not.toContain("Agent-ready context");
+    expect(html).not.toContain("No files");
+    expect(html).not.toContain("Missing refs");
+    const searchIndex = JSON.parse(
+      await readFile(path.join(tempDir, ".ledger/dist/public/search-index.json"), "utf8"),
+    ) as readonly Record<string, unknown>[];
+    expect(searchIndex.find((entry) => entry.id === "v1.0.0")).toMatchObject({
+      publicNotes: ["Safe public feature."],
+    });
+    for (const forbidden of [
+      "path",
+      "areas",
+      "tags",
+      "files",
+      "symbols",
+      "docs",
+      "summary",
+      "why",
+      "release",
+    ]) {
+      for (const entry of searchIndex) {
+        expect(entry).not.toHaveProperty(forbidden);
+        expect(entry.fields).not.toHaveProperty(forbidden);
+      }
+    }
+  });
+});
+
+describe("renderStaticReaderHtml", () => {
+  it("renders escaped source and embedded JSON data", () => {
+    const model = buildStaticReaderModel(workspace(), [
+      document("0001", "change", "Escape <script>"),
+    ]);
+    const html = renderStaticReaderHtml(model, { iconSvg: "<svg><title>Ledger</title></svg>" });
+
+    expect(html).toContain("Escape &lt;script&gt;");
+    expect(html).toContain('http-equiv="Content-Security-Policy"');
+    expect(html).toContain('name="referrer" content="no-referrer"');
+    expect(html).toContain('fetch("search-index.json")');
+    expect(html).toContain("fuzzyScore");
+    expect(html).toContain("scoreSearchDocument");
+    expect(html).toContain("searchWeights");
+    expect(html).toContain('role="combobox" aria-expanded="false"');
+    expect(html).toContain("startViewTransition");
+    expect(html).toContain("viewTransitionName");
+    expect(html).toContain("prefers-reduced-motion");
+    expect(html).toContain("writeUrlState");
+    expect(html).toContain("<svg><title>Ledger</title></svg>");
+    expect(html).toContain('<use href="#i-');
+    expect(html.split('<symbol id="i-chevron"')).toHaveLength(2);
+    expect(html).toContain("light-dark(");
+    expect(html).toContain("--line:");
+    expect(html).toContain("1px solid var(--line");
+    expect(html).toContain("Agent-ready context");
+    expect(html).toContain("Missing references");
+    expect(html).toContain("Coverage");
+    expect(html).toContain("Tag");
+    expect(html).toContain('data-areas="[&quot;cli&quot;]"');
+    expect(html).toContain('data-search="');
+    expect(html).toContain("datasetList");
+    expect(html).toContain("controlValue");
+    expect(html).toContain("fallbackBlobs");
+    expect(html).toContain("Top match");
+    expect(html).toContain(".ledger/entries/0001.md");
+    expect(html).toContain('<time class="record-date"');
+    expect(html).toContain('datetime="2026-06-29"');
+    expect(html).toContain('class="entry-link"');
+    expect(html).toContain('href="?record=0001"');
+    expect(html).toContain('<template class="entry-detail">');
+    expect(html).toContain('id="record-panel"');
+    expect(html).toContain("record-panel-title");
+    expect(html).toContain("openPanel");
+    expect(html).not.toContain("entry-details");
+    expect(html).not.toContain("# 0001: Change");
+    expect(html).toContain("<h4>Invariants</h4>");
+    expect(html).toContain("<h4>Verification</h4>");
+    expect(html).toContain('role="feed"');
+    expect(html).toContain("aria-busy");
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('id="active-filters"');
+    expect(html).toContain('class="search-region"');
+    expect(html).toContain('class="filter-bar"');
+    expect(html).toContain('class="rail"');
+    expect(html).toContain('id="per-page"');
+    expect(html).toContain('aria-label="Pagination"');
+    expect(html).toContain("density-toggle");
+    expect(html).toContain('data-density="compact"');
+    expect(html).toContain("renderPagination");
+    expect(html).toContain("ledger-density");
+    expect(html).toContain("currentPage");
+    expect(html).not.toContain("filter-scrim");
+    expect(html).not.toContain("sidebar-open");
+    expect(html).toContain("Quick views");
+    expect(html).toContain("facet-button");
+    expect(html).toContain("Relationship graph");
+    expect(html).toContain("graph.json");
+    expect(html).toContain("score-label");
+    expect(html).toContain("ranked match");
+    expect(html).toContain("Decisions");
+    expect(html).toContain('data-filter-value="decision"');
+    expect(html).toContain("D001");
+    expect(html).not.toContain("border-left");
+    expect(html).not.toContain('<i aria-hidden="true"></i>');
+    expect(html).not.toContain('focusable="false"');
+    expect(html).not.toContain("--shadow-md");
+    expect(html).toContain("markYearBreaks");
+    expect(html).toContain(".release-feed .year-start::before");
+    expect(html).toContain("content: attr(data-year)");
+    expect(html).toContain('data-empty-variant="filtered"');
+    expect(html).toContain("No records yet");
+    expect(html).toContain("emptyState");
+    expect(html).toContain('class="select-wrap"');
+    expect(html).toContain("mask: url(");
+    expect(html).toContain("#theme-toggle:hover");
+    expect(html).not.toContain("%23838880");
+    expect(html).not.toContain("@keyframes reveal");
+    expect(html).not.toContain("panel-open");
+  });
+});
+
+function workspace(projectRoot = "/tmp/ledger"): LedgerWorkspace {
+  return {
+    projectRoot,
+    ledgerRoot: `${projectRoot}/.ledger`,
+    configPath: `${projectRoot}/.ledger/config.yaml`,
+    config: defaultConfig,
+  };
+}
+
+function publicReleaseDocument(
+  id: string,
+  status: "planned" | "released",
+  date = "2026-06-29",
+): ParsedLedgerDocument {
+  const raw = `---
+id: "${id}"
+kind: "release"
+title: "Ledger ${id}"
+date: "${date}"
+status: "${status}"
+areas: ["private-area"]
+files:
+  - "src/private.ts"
+symbols:
+  - "privateSymbol"
+entries:
+  - "0001"
+---
+
+# Ledger ${id}
+
+## Summary
+
+Internal release detail.
+
+## Public Notes
+
+- Safe public feature.
+
+## Invariants
+
+- Keep private behavior stable.
+`;
+  const parsed = parseMarkdownWithFrontmatter(raw);
+  return {
+    absolutePath: `/tmp/ledger/.ledger/releases/${id}.md`,
+    relativePath: `.ledger/releases/${id}.md`,
+    raw,
+    frontmatterRaw: parsed.frontmatterRaw,
+    frontmatter: parsed.frontmatter,
+    body: parsed.body,
+    sections: parsed.sections,
+    kind: "release",
+  };
+}
+
+function document(
+  id: string,
+  kind: "change" | "backlog" | "decision" | "release",
+  title: string,
+  date = "2026-06-29",
+): ParsedLedgerDocument {
+  const raw = `---
+id: "${id}"
+kind: "${kind}"
+title: "${title}"
+date: "${date}"
+status: "landed"
+areas: ["cli"]
+files:
+  - "src/cli.ts"
+symbols: []
+commits: []
+release: "v1.0.0"
+decisions:
+  - "D001"
+backlog:
+  - "B001"
+---
+
+# ${id}: ${title}
+
+## Summary
+
+Summary.
+
+## Invariants
+
+- Keep this true.
+
+## Verification
+
+- npm test
+`;
+  const parsed = parseMarkdownWithFrontmatter(raw);
+  return {
+    absolutePath: `/tmp/ledger/.ledger/entries/${id}.md`,
+    relativePath: `.ledger/entries/${id}.md`,
+    raw,
+    frontmatterRaw: parsed.frontmatterRaw,
+    frontmatter: parsed.frontmatter,
+    body: parsed.body,
+    sections: parsed.sections,
+    kind,
+  };
+}

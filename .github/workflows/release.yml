@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish npm package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify
+        run: npm run ci
+
+      - name: Check npm version
+        id: npm_version
+        shell: bash
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ "$tag_version" != "$version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $version." >&2
+            exit 1
+          fi
+
+          set +e
+          view_output="$(npm view "$name@$version" version --json 2>&1)"
+          view_status=$?
+          set -e
+
+          if [[ $view_status -eq 0 ]]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "$name@$version is already published; skipping npm publish."
+          elif grep -q "E404" <<<"$view_output"; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$view_output" >&2
+            echo "Could not determine whether $name@$version is already published." >&2
+            exit "$view_status"
+          fi
+
+      - name: Publish
+        if: ${{ steps.npm_version.outputs.published != 'true' }}
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

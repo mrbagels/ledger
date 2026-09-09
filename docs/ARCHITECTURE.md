@@ -156,6 +156,7 @@ It should support:
 
 - changed file detection
 - staged diff summaries
+- explicit merge-base ranges for clean pull-request checkouts
 - commit metadata
 - pull request metadata where available
 - `--from-diff` entry drafting
@@ -165,6 +166,11 @@ The first coverage command is intentionally path based: files matching
 `git.requireEntryFor` must be referenced by a Ledger entry unless they match
 `git.ignore`. This gives CI a deterministic guard before semantic symbol
 coverage exists.
+
+Working-tree inspection, staged inspection, and committed range inspection are
+separate modes. Range-aware commands require both a base and head revision and
+use Git's merge-base diff. Git command failures are typed operational errors;
+they never collapse into an apparently clean change set.
 
 Drafting from Git diffs stays conservative. Ledger can infer areas from changed
 paths, extract Markdown headings and parser-backed TypeScript or JavaScript
@@ -178,7 +184,9 @@ the entry before landing it.
 `ledger ci` composes validation, docs audit, coverage, and docs impact into one
 result. It does not replace the individual commands; it packages their current
 state for CI, local preflight checks, and agent automation. Human output is
-compact, while JSON output preserves the nested results for tools.
+compact, while JSON output preserves the nested results for tools. In clean PR
+checkouts, `--base <revision> --head <revision>` supplies the committed range to
+coverage and docs impact.
 
 ### Integrity
 
@@ -469,6 +477,8 @@ source record directories and regenerates the reader after edits.
 ### `ledger ci`
 
 Runs validation, docs audit, coverage, and docs impact as one CI-friendly check.
+Use `--base <revision> --head <revision>` in a clean checkout, or `--staged` for
+the staged index; the modes cannot be combined.
 
 ### `ledger doctor`
 
@@ -516,6 +526,8 @@ source changes that have no visible docs impact. Explicit `docsImpact`
 declarations can mark docs as updated, not needed, or unaffected when a reviewed
 reason is present. The command does not rewrite documentation; it only surfaces
 whether docs were touched, referenced, or intentionally declared unnecessary.
+It accepts the same working-tree, staged, or explicit base/head change modes as
+coverage and CI.
 
 ### `ledger docs classify`
 

@@ -84,6 +84,7 @@ describe("Ledger MCP", () => {
     const payload = await callTool("ledger_query", {
       projectRoot,
       area: "cli",
+      tag: "integration",
       text: "mcp",
     });
 
@@ -248,6 +249,7 @@ date: "2026-06-29"
 updated: "2026-06-29"
 status: "landed"
 areas: ["cli"]
+tags: ["integration"]
 files:
   - "src/cli.ts"
 symbols:

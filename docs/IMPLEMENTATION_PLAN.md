@@ -158,6 +158,9 @@ Reads changed files from Git and checks whether files matching
 `git.requireEntryFor` are mentioned by at least one Ledger entry. `--staged`
 uses the staged diff, `--explain` prints why each path is required, ignored,
 covered, or missing, and `--json` emits the raw result for CI or agent tools.
+`--base <revision> --head <revision>` inspects a committed merge-base range for
+clean pull-request checkouts. Range and staged modes are mutually exclusive,
+and Git failures are operational errors rather than empty results.
 
 ### `ledger migrate changelog <dir>`
 
@@ -176,7 +179,8 @@ that should stay separate from normal implementation receipts.
 Runs the core Ledger guard set in one command: validation, docs reference audit,
 Git coverage, and docs impact. Human output is a compact pass/fail summary.
 `--json` emits the full result model, `--current-only` skips historical records,
-and `--staged` uses the staged Git diff for coverage and docs impact.
+and `--staged` uses the staged Git diff for coverage and docs impact. Paired
+`--base` and `--head` revisions use a committed merge-base range instead.
 
 ### `ledger doctor`
 
@@ -222,7 +226,8 @@ impact. A docs impact exists when a docs file changed directly, when a changed
 Ledger entry references docs, or when a changed entry includes a reviewed
 `docsImpact` declaration such as `status: not-needed` with a non-TODO reason.
 `--staged` inspects the staged diff, `--json` emits the raw model, and `--check`
-exits non-zero when source files lack docs impact.
+exits non-zero when source files lack docs impact. Paired `--base` and `--head`
+revisions inspect a committed merge-base range instead.
 
 ### `ledger explain <path>`
 

@@ -55,6 +55,26 @@ describe("file transactions", () => {
     expect(await readFile(filePath, "utf8")).toBe("newer editor content\n");
   });
 
+  it("deletes files atomically alongside writes", async () => {
+    const workspace = await fixtureWorkspace();
+    const deletedPath = path.join(tempDir!, "docs", "stale.md");
+    await mkdir(path.dirname(deletedPath), { recursive: true });
+    await writeFile(deletedPath, "stale\n", "utf8");
+
+    const result = await applyFileTransaction(workspace, "replace generated files", [
+      {
+        path: "docs/stale.md",
+        delete: true,
+        expectedHash: hashFileContent("stale\n"),
+      },
+      { path: "docs/current.md", content: "current\n", expectedHash: null },
+    ]);
+
+    expect(result.changedPaths).toEqual(["docs/stale.md", "docs/current.md"]);
+    await expect(readFile(deletedPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(path.join(tempDir!, "docs", "current.md"), "utf8")).toBe("current\n");
+  });
+
   it("does not steal an active workspace lock", async () => {
     const workspace = await fixtureWorkspace();
     await writeFile(
@@ -111,6 +131,40 @@ describe("file transactions", () => {
     expect(await readFile(target, "utf8")).toBe("old\n");
     await expect(readFile(backup, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(stage, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("restores a file deleted by an interrupted applying transaction", async () => {
+    const workspace = await fixtureWorkspace();
+    const id = "00000000-0000-4000-8000-000000000003";
+    const target = path.join(tempDir!, "README.md");
+    const backup = `${target}.ledger-${id}.backup`;
+    await rm(target, { force: true });
+    await writeFile(backup, "before delete\n", "utf8");
+    const transactionDirectory = path.join(tempDir!, ".ledger", "transactions");
+    await mkdir(transactionDirectory, { recursive: true });
+    await writeFile(
+      path.join(transactionDirectory, `${id}.json`),
+      `${JSON.stringify({
+        version: 1,
+        id,
+        operation: "interrupted delete",
+        phase: "applying",
+        createdAt: new Date().toISOString(),
+        changes: [
+          {
+            path: "README.md",
+            originalHash: hashFileContent("before delete\n"),
+            nextHash: null,
+          },
+        ],
+      })}\n`,
+      "utf8",
+    );
+
+    await recoverInterruptedTransactions(workspace);
+
+    expect(await readFile(target, "utf8")).toBe("before delete\n");
+    await expect(readFile(backup, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rejects unsafe or malformed recovery journals", async () => {

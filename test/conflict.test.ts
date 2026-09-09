@@ -63,6 +63,53 @@ describe("buildConflictTargets", () => {
     expect(target?.entries[0]?.invariants).toEqual(["Exit codes stay stable."]);
     expect(target?.entries[0]?.verification).toEqual(["npm test"]);
   });
+
+  it("matches grouped coverage patterns and their conflict rules", () => {
+    const [target] = buildConflictTargets(
+      [document({
+        files: ["src/features/**"],
+        changedFiles: `### Pattern: src/features/**
+
+- What changed: Updated the feature group.
+- On conflict: Preserve grouped feature behavior.`,
+      })],
+      ["src/features/editor/model.ts"],
+    );
+
+    expect(target?.entries).toHaveLength(1);
+    expect(target?.entries[0]?.matchedFiles).toEqual(["src/features/**"]);
+    expect(target?.entries[0]?.conflictRules).toEqual([
+      "Preserve grouped feature behavior.",
+    ]);
+  });
+
+  it.each([
+    ["prefix:src/features", "src/features/editor/model.ts"],
+    ["glob:src/**/model.ts", "src/features/editor/model.ts"],
+  ])("matches %s coverage references", (fileReference, targetPath) => {
+    const [target] = buildConflictTargets(
+      [document({
+        files: [fileReference],
+        changedFiles: `### Pattern: ${fileReference}
+
+- On conflict: Preserve pattern behavior.`,
+      })],
+      [targetPath],
+    );
+
+    expect(target?.entries[0]?.matchedFiles).toEqual([fileReference]);
+    expect(target?.entries[0]?.conflictRules).toEqual(["Preserve pattern behavior."]);
+  });
+
+  it("preserves suffix path matching", () => {
+    const [target] = buildConflictTargets([document()], ["cli.ts"]);
+
+    expect(target?.entries).toHaveLength(1);
+    expect(target?.entries[0]?.matchedFiles).toContain("src/cli.ts");
+    expect(target?.entries[0]?.conflictRules).toEqual([
+      "Keep CLI behavior and preserve exit codes.",
+    ]);
+  });
 });
 
 describe("formatConflictReport", () => {
@@ -82,7 +129,22 @@ describe("formatConflictReport", () => {
   });
 });
 
-function document(): ParsedLedgerDocument {
+function document(
+  options: {
+    readonly files?: readonly string[];
+    readonly changedFiles?: string;
+  } = {},
+): ParsedLedgerDocument {
+  const files = options.files ?? ["src/cli.ts", "README.md"];
+  const changedFiles = options.changedFiles ?? `### src/cli.ts
+
+- What changed: Test.
+- On conflict: Keep CLI behavior and preserve exit codes.
+
+### README.md
+
+- What changed: Test.
+- On conflict: Keep README examples current.`;
   const raw = `---
 id: "0001"
 kind: "change"
@@ -91,8 +153,7 @@ date: "2026-06-29"
 status: "landed"
 areas: ["cli"]
 files:
-  - "src/cli.ts"
-  - "README.md"
+${files.map((filePath) => `  - "${filePath}"`).join("\n")}
 symbols: []
 commits: []
 ---
@@ -101,15 +162,7 @@ commits: []
 
 ## Changed Files
 
-### src/cli.ts
-
-- What changed: Test.
-- On conflict: Keep CLI behavior and preserve exit codes.
-
-### README.md
-
-- What changed: Test.
-- On conflict: Keep README examples current.
+${changedFiles}
 
 ## Invariants
 

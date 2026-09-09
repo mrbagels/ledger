@@ -16,11 +16,21 @@ import { LedgerError } from "./machine.js";
 import { assertSafeProjectRelativePath, resolveSafeProjectPath } from "./projectPaths.js";
 import type { LedgerWorkspace } from "./types.js";
 
-export interface LedgerFileChange {
+interface LedgerFileWriteChange {
   readonly path: string;
   readonly content: string;
+  readonly delete?: never;
   readonly expectedHash?: string | null;
 }
+
+interface LedgerFileDeleteChange {
+  readonly path: string;
+  readonly delete: true;
+  readonly content?: never;
+  readonly expectedHash?: string | null;
+}
+
+export type LedgerFileChange = LedgerFileWriteChange | LedgerFileDeleteChange;
 
 export interface LedgerFileTransactionResult {
   readonly id: string;
@@ -45,7 +55,7 @@ interface PreparedChange {
   readonly stagePath: string;
   readonly backupPath: string;
   readonly originalHash: string | null;
-  readonly nextHash: string;
+  readonly nextHash: string | null;
   readonly content: string;
   readonly mode?: number;
 }
@@ -62,7 +72,7 @@ interface TransactionJournal {
 interface JournalChange {
   readonly path: string;
   readonly originalHash: string | null;
-  readonly nextHash: string;
+  readonly nextHash: string | null;
   readonly mode?: number;
 }
 
@@ -77,6 +87,7 @@ interface LockOwner {
 const staleLockMs = 15 * 60 * 1000;
 const maxLockBytes = 16 * 1024;
 const maxOperationLength = 500;
+const generatedArtifactFiles = 4;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const sha256Pattern = /^[a-f0-9]{64}$/;
 
@@ -119,11 +130,13 @@ export async function applyFileTransaction(
     await writeJournal(journalPath, journal(id, operation, "prepared", changed));
     let committed = false;
     try {
-      for (const change of changed) await writeStage(change);
+      for (const change of changed) {
+        if (change.nextHash !== null) await writeStage(change);
+      }
       await writeJournal(journalPath, journal(id, operation, "applying", changed));
       for (const change of changed) {
         if (change.originalHash !== null) await rename(change.targetPath, change.backupPath);
-        await rename(change.stagePath, change.targetPath);
+        if (change.nextHash !== null) await rename(change.stagePath, change.targetPath);
       }
       await writeJournal(journalPath, journal(id, operation, "committed", changed));
       committed = true;
@@ -245,18 +258,23 @@ async function prepareChanges(
       throw new ConcurrentFileChangeError(normalized);
     }
     const suffix = `.ledger-${id}`;
+    const content = change.delete === true ? "" : change.content;
     prepared.push({
       path: normalized,
       targetPath,
       stagePath: `${targetPath}${suffix}.stage`,
       backupPath: `${targetPath}${suffix}.backup`,
       originalHash: current.hash,
-      nextHash: hashFileContent(change.content),
-      content: change.content,
+      nextHash: change.delete === true ? null : hashFileContent(change.content),
+      content,
       mode: current.mode === undefined ? undefined : current.mode & 0o777,
     });
   }
-  for (const directory of new Set(prepared.map((change) => path.dirname(change.targetPath)))) {
+  for (const directory of new Set(
+    prepared
+      .filter((change) => change.nextHash !== null)
+      .map((change) => path.dirname(change.targetPath)),
+  )) {
     await mkdir(directory, { recursive: true });
   }
   return prepared;
@@ -549,19 +567,27 @@ function validateTransactionInput(
   if (!operation.trim() || operation.length > maxOperationLength) {
     throw new LedgerError("invalid-argument", "Transaction operation must be 1 to 500 characters");
   }
-  if (changes.length > workspace.config.limits.maxDocuments) {
+  const maxChanges = maxTransactionChanges(workspace);
+  if (changes.length > maxChanges) {
     throw new LedgerError(
       "resource-limit-exceeded",
-      `Transaction exceeds ${workspace.config.limits.maxDocuments} file changes`,
-      { kind: "transaction-files", limit: workspace.config.limits.maxDocuments },
+      `Transaction exceeds ${maxChanges} file changes`,
+      { kind: "transaction-files", limit: maxChanges },
     );
   }
   let totalBytes = 0;
   for (const change of changes) {
-    if (typeof change.path !== "string" || typeof change.content !== "string") {
-      throw new LedgerError("invalid-argument", "Transaction changes require string paths and content");
+    const content = (change as { readonly content?: unknown }).content;
+    const deletion = (change as { readonly delete?: unknown }).delete;
+    const isWrite = typeof content === "string" && deletion === undefined;
+    const isDeletion = content === undefined && deletion === true;
+    if (typeof change.path !== "string" || (!isWrite && !isDeletion)) {
+      throw new LedgerError(
+        "invalid-argument",
+        "Transaction changes require a string path and exactly one write or delete action",
+      );
     }
-    const bytes = Buffer.byteLength(change.content, "utf8");
+    const bytes = isWrite ? Buffer.byteLength(content, "utf8") : 0;
     if (bytes > workspace.config.limits.maxTotalDocumentBytes) {
       throw new LedgerError(
         "resource-limit-exceeded",
@@ -618,7 +644,7 @@ async function readTransactionJournal(
     typeof value.createdAt !== "string" ||
     !Number.isFinite(Date.parse(value.createdAt)) ||
     !Array.isArray(value.changes) ||
-    value.changes.length > workspace.config.limits.maxDocuments
+    value.changes.length > maxTransactionChanges(workspace)
   ) {
     throw invalidJournal(journalPath);
   }
@@ -630,7 +656,7 @@ async function readTransactionJournal(
     if (
       typeof change.path !== "string" ||
       (change.originalHash !== null && !sha256Pattern.test(change.originalHash ?? "")) ||
-      !sha256Pattern.test(change.nextHash ?? "") ||
+      (change.nextHash !== null && !sha256Pattern.test(change.nextHash ?? "")) ||
       (change.mode !== undefined &&
         (!Number.isInteger(change.mode) || change.mode < 0 || change.mode > 0o177777))
     ) {
@@ -647,7 +673,7 @@ async function readTransactionJournal(
     changes.push({
       path: canonicalPath,
       originalHash: change.originalHash as string | null,
-      nextHash: change.nextHash as string,
+      nextHash: change.nextHash as string | null,
       mode: change.mode,
     });
   }
@@ -667,6 +693,10 @@ function invalidJournal(journalPath: string): LedgerError {
     `Invalid transaction journal: ${journalPath}`,
     { path: journalPath },
   );
+}
+
+function maxTransactionChanges(workspace: LedgerWorkspace): number {
+  return workspace.config.limits.maxDocuments * 2 + generatedArtifactFiles;
 }
 
 function isCode(error: unknown, code: string): boolean {

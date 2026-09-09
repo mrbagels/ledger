@@ -119,7 +119,7 @@ Deliverables:
 
 - `ledger init --with-docs`
 - `ledger adopt`
-- `ledger docs impact --from-diff`
+- `ledger docs impact` for the working tree, `--staged`, or an explicit `--base`/`--head` range
 - `ledger docs reconcile` for `docs/llm/manifest.json` and `docs/llm/START_HERE.md`
 - `ledger docs migrate`
 - docs frontmatter conventions for durable docs
@@ -185,7 +185,8 @@ Deliverables:
 
 ## Phase 7: CI And GitHub
 
-Status: local and repository CI shipped; richer PR annotations remain future work
+Status: local and repository CI plus clean-checkout PR range checks shipped;
+reusable actions and richer PR annotations remain future work
 
 Goals:
 
@@ -197,7 +198,7 @@ Goals:
 
 Deliverables:
 
-- `ledger/action`
+- `ledger/action` (future reusable package)
 - `ledger ci`
 - `ledger doctor`
 - `ledger stale`

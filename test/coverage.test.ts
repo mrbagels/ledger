@@ -73,6 +73,50 @@ describe("checkCoverage", () => {
     expect(missing?.status).toBe("missing");
     expect(missing?.requiredBy).toBe("src/**");
   });
+
+  it("checks a committed base-to-head range from a clean worktree", async () => {
+    const workspace = await createFixtureWorkspace();
+    await git(workspace.projectRoot, "init");
+    await git(workspace.projectRoot, "config", "user.email", "ledger@example.com");
+    await git(workspace.projectRoot, "config", "user.name", "Ledger Test");
+    await git(workspace.projectRoot, "add", ".");
+    await git(workspace.projectRoot, "commit", "-m", "base");
+    const base = await gitOutput(workspace.projectRoot, "rev-parse", "HEAD");
+    await writeFile(path.join(workspace.projectRoot, "src", "range-missing.ts"), "missing");
+    await git(workspace.projectRoot, "add", ".");
+    await git(workspace.projectRoot, "commit", "-m", "head");
+    const head = await gitOutput(workspace.projectRoot, "rev-parse", "HEAD");
+
+    const documents = await readLedgerDocuments(workspace);
+    const result = await checkCoverage(workspace, documents, { base, head });
+
+    expect(result.changedFiles).toEqual(["src/range-missing.ts"]);
+    expect(result.missingFiles).toEqual(["src/range-missing.ts"]);
+  });
+
+  it("requires coverage when a source file is renamed outside the required path set", async () => {
+    const workspace = await createFixtureWorkspace();
+    await writeFile(path.join(workspace.projectRoot, "src", "renamed.ts"), "source");
+    await git(workspace.projectRoot, "init");
+    await git(workspace.projectRoot, "config", "user.email", "ledger@example.com");
+    await git(workspace.projectRoot, "config", "user.name", "Ledger Test");
+    await git(workspace.projectRoot, "add", ".");
+    await git(workspace.projectRoot, "commit", "-m", "base");
+    const base = await gitOutput(workspace.projectRoot, "rev-parse", "HEAD");
+    await mkdir(path.join(workspace.projectRoot, "archive"), { recursive: true });
+    await git(workspace.projectRoot, "mv", "src/renamed.ts", "archive/renamed.ts");
+    await git(workspace.projectRoot, "commit", "-m", "move source out of scope");
+    const head = await gitOutput(workspace.projectRoot, "rev-parse", "HEAD");
+
+    const result = await checkCoverage(
+      workspace,
+      await readLedgerDocuments(workspace),
+      { base, head },
+    );
+
+    expect(result.changedFiles).toEqual(["archive/renamed.ts", "src/renamed.ts"]);
+    expect(result.missingFiles).toEqual(["src/renamed.ts"]);
+  });
 });
 
 async function createFixtureWorkspace(): Promise<LedgerWorkspace> {
@@ -137,6 +181,16 @@ async function git(cwd: string, ...args: readonly string[]): Promise<void> {
     execFile("git", args, { cwd }, (error) => {
       if (error) reject(error);
       else resolve();
+    });
+  });
+}
+
+async function gitOutput(cwd: string, ...args: readonly string[]): Promise<string> {
+  const { execFile } = await import("node:child_process");
+  return await new Promise<string>((resolve, reject) => {
+    execFile("git", args, { cwd }, (error, stdout) => {
+      if (error) reject(error);
+      else resolve(stdout.trim());
     });
   });
 }

@@ -283,13 +283,13 @@ brew install ledger
 | `ledger verify-integrity` | Writes record and catalog hashes for provenance checks. Use `--check` to compare without replacing the baseline. |
 | `ledger render` | Builds the internal static reader. Use `--profile public` for released public notes only. |
 | `ledger serve --watch` | Serves the static reader on loopback and rebuilds it when Ledger records change. Use `--profile public` to preview only the isolated public output. |
-| `ledger coverage --explain` | Checks that changed source paths have Ledger coverage and explains required, ignored, covered, and missing paths. |
+| `ledger coverage --explain` | Checks working-tree paths, or an explicit `--base`/`--head` range, and explains required, ignored, covered, and missing coverage. |
 | `ledger doctor` | Checks workspace health, Git availability, write transaction state, validation, docs references, index freshness, render output, performance budgets, and stale signals. |
 | `ledger metrics` | Measures read, validate, index, render-model, and search latency against configured budgets. |
 | `ledger stale --check` | Finds stale knowledge signals such as missing relationships, stale symbols, and release verification gaps. |
 | `ledger docs audit` | Finds missing and unreferenced durable docs links. |
 | `ledger docs classify <path>` | Classifies docs as durable, routing, scratch, generated, or unknown. |
-| `ledger docs impact --check` | Fails when source changes lack docs impact. |
+| `ledger docs impact --check` | Fails when working-tree or explicit `--base`/`--head` source changes lack docs impact. |
 | `ledger docs reconcile` | Regenerates the docs routing manifest and `START_HERE.md` from the docs audit. |
 | `ledger docs migrate` | Writes a docs migration report with cleanup guidance. |
 | `ledger explain <path>` | Shows records related to a file. |
@@ -304,7 +304,7 @@ brew install ledger
 | `ledger release v0.1.1 --include-unreleased --assign --status released --write` | Assigns selected entries and writes a release record. |
 | `ledger migrate changelog <dir> --rewrite-docs` | Migrates legacy Markdown changelog records into `.ledger/entries` and writes a receipt. |
 | `ledger agents --role reviewer` | Prints role-specific `AGENTS.md` instructions for the configured workflow. |
-| `ledger ci` | Runs validation, docs audit, coverage, and docs impact together. |
+| `ledger ci` | Runs validation, docs audit, coverage, and docs impact together; accepts `--base` and `--head` for clean PR checkouts. |
 
 Every command has focused help:
 
@@ -459,6 +459,17 @@ ledger doctor
 ledger stale
 ledger ci
 ```
+
+In a clean pull-request checkout, pass the compared revisions so coverage and
+docs impact inspect committed changes rather than an empty working tree:
+
+```bash
+ledger ci --base <base-revision> --head <head-revision>
+```
+
+Ledger compares the merge-base range. `--staged` and `--base`/`--head` are
+mutually exclusive, and Git inspection failures are reported as operational
+errors instead of being treated as zero changed files.
 
 The entry should tell the next agent what changed, what must remain true, and
 how to verify the behavior.

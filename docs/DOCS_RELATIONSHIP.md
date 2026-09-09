@@ -134,7 +134,9 @@ Suggested commands:
 ```bash
 ledger docs audit
 ledger docs classify
-ledger docs impact --from-diff
+ledger docs impact
+ledger docs impact --staged
+ledger docs impact --base <base-revision> --head <head-revision>
 ledger docs reconcile
 ```
 

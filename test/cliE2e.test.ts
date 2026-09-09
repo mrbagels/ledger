@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -98,6 +99,11 @@ describe("CLI end-to-end", () => {
     expect(stale.exitCode).toBe(0);
     expect(stale.stdout).toContain("Ledger Stale Knowledge Report");
 
+    await git(tempDir, "init");
+    await git(tempDir, "config", "user.email", "ledger@example.com");
+    await git(tempDir, "config", "user.name", "Ledger Test");
+    await git(tempDir, "add", ".");
+    await git(tempDir, "commit", "-m", "fixture");
     expect((await captureRun(["ci"], tempDir)).exitCode).toBe(0);
   });
 
@@ -196,6 +202,66 @@ describe("CLI end-to-end", () => {
       ok: false,
       error: { code: "invalid-argument", message: "--limit must be a positive integer" },
     });
+
+    const invalidRole = await captureRun(["agents", "--role", "revieewer"], tempDir);
+    expect(invalidRole.exitCode).toBe(2);
+    expect(invalidRole.stdout).toBe("");
+    expect(invalidRole.stderr).toContain("Invalid agent role: revieewer");
+
+    const invalidPositionals = [
+      {
+        argv: ["explain", "src/one.ts", "src/two.ts", "--json"],
+        command: "explain",
+      },
+      {
+        argv: ["packet", "src/one.ts", "src/two.ts", "--json"],
+        command: "packet",
+      },
+      {
+        argv: ["release", "v1.0.0", "unexpected", "--json"],
+        command: "release",
+      },
+      {
+        argv: ["migrate", "changelog", "legacy", "unexpected", "--json"],
+        command: "migrate.changelog",
+      },
+      {
+        argv: ["validate", "unexpected", "--json"],
+        command: "validate",
+      },
+    ];
+    for (const { argv, command } of invalidPositionals) {
+      const invalid = await captureRun(argv, tempDir);
+      expect(invalid.exitCode).toBe(2);
+      expect(invalid.stderr).toBe("");
+      expect(JSON.parse(invalid.stdout)).toMatchObject({
+        schemaVersion: 1,
+        ok: false,
+        command,
+        error: { code: "invalid-argument" },
+      });
+    }
+  });
+
+  it("keeps supported multi-positional commands", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-cli-positionals-"));
+    expect((await captureRun(["init"], tempDir)).exitCode).toBe(0);
+
+    const conflict = await captureRun(
+      ["conflict", "src/one.ts", "src/two.ts"],
+      tempDir,
+    );
+    expect(conflict.exitCode).toBe(0);
+    expect(conflict.stdout).toContain("Conflict guidance for src/one.ts:");
+    expect(conflict.stdout).toContain("Conflict guidance for src/two.ts:");
+
+    const classify = await captureRun(
+      ["docs", "classify", "docs/PRODUCT.md", "docs/API.md"],
+      tempDir,
+    );
+    expect(classify.exitCode).toBe(0);
+    expect(classify.stdout).toContain("docs/PRODUCT.md");
+    expect(classify.stdout).toContain("docs/API.md");
   });
 
   it("does not consume positionals after boolean flags", async () => {
@@ -260,6 +326,15 @@ async function exists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function git(cwd: string, ...args: readonly string[]): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    execFile("git", [...args], { cwd }, (error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
 
 function releaseRecord(): string {

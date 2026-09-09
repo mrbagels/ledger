@@ -1,15 +1,30 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../src/config.js";
 import { parseMarkdownWithFrontmatter } from "../src/frontmatter.js";
-import { buildStaticReaderModel, renderStaticReaderHtml, writeStaticReader } from "../src/render.js";
+import {
+  buildStaticReaderModel,
+  checkRenderBudgets,
+  renderStaticReaderHtml,
+  writeStaticReader,
+} from "../src/render.js";
+import {
+  closeStaticReader,
+  serveStaticReader,
+  type LedgerServeResult,
+} from "../src/serve.js";
 import type { LedgerWorkspace, ParsedLedgerDocument } from "../src/types.js";
 
 let tempDir: string | undefined;
+let servedReader: LedgerServeResult | undefined;
 
 afterEach(async () => {
+  if (servedReader) {
+    await closeStaticReader(servedReader);
+    servedReader = undefined;
+  }
   if (tempDir) {
     await rm(tempDir, { recursive: true, force: true });
     tempDir = undefined;
@@ -112,22 +127,186 @@ describe("buildStaticReaderModel", () => {
 });
 
 describe("writeStaticReader", () => {
+  it("writes internal Markdown source links inside the served render root", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-render-source-test-"));
+    const testWorkspace = workspace(tempDir);
+    const sourceDocument = document("0001", "change", "Change");
+    const model = buildStaticReaderModel(testWorkspace, [sourceDocument]);
+    const sourceHref = model.documents[0]?.sourceHref;
+
+    expect(sourceHref).toMatch(/^sources\/0001-[a-f0-9]{16}\.md$/);
+
+    const result = await writeStaticReader(testWorkspace, model);
+    const html = await readFile(path.join(tempDir, result.outputPath), "utf8");
+    const sourcePath = path.join(tempDir, defaultConfig.render.output, sourceHref!);
+
+    expect(html).toContain(`href="${sourceHref}"`);
+    expect(html).toContain(`download="0001.md"`);
+    expect(await readFile(sourcePath, "utf8")).toBe(sourceDocument.raw);
+
+    servedReader = await serveStaticReader(testWorkspace, { port: 0 });
+    const response = await fetch(new URL(sourceHref!, servedReader.url));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(sourceDocument.raw);
+  });
+
+  it("prunes only previously generated sources at the configured catalog limit", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-render-prune-test-"));
+    const baseWorkspace = workspace(tempDir);
+    const testWorkspace: LedgerWorkspace = {
+      ...baseWorkspace,
+      config: {
+        ...baseWorkspace.config,
+        limits: { ...baseWorkspace.config.limits, maxDocuments: 1 },
+      },
+    };
+    const sourceDocument = document("0001", "change", "Change");
+    const firstModel = buildStaticReaderModel(testWorkspace, [sourceDocument]);
+    const firstHref = firstModel.documents[0]!.sourceHref;
+    await writeStaticReader(testWorkspace, firstModel);
+
+    const sourcesDirectory = path.join(tempDir, defaultConfig.render.output, "sources");
+    const unrelatedPath = path.join(sourcesDirectory, "notes.md");
+    await writeFile(unrelatedPath, "user-owned\n", "utf8");
+    const movedDocument: ParsedLedgerDocument = {
+      ...sourceDocument,
+      absolutePath: path.join(tempDir, ".ledger/entries/moved/0001.md"),
+      relativePath: ".ledger/entries/moved/0001.md",
+    };
+    const movedModel = buildStaticReaderModel(testWorkspace, [movedDocument]);
+    const movedHref = movedModel.documents[0]!.sourceHref;
+
+    expect(movedHref).not.toBe(firstHref);
+    await writeStaticReader(testWorkspace, movedModel);
+    await expect(
+      readFile(path.join(tempDir, defaultConfig.render.output, firstHref), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(
+      await readFile(path.join(tempDir, defaultConfig.render.output, movedHref), "utf8"),
+    ).toBe(sourceDocument.raw);
+    expect(await readFile(unrelatedPath, "utf8")).toBe("user-owned\n");
+
+    await writeStaticReader(testWorkspace, buildStaticReaderModel(testWorkspace, []));
+    await expect(
+      readFile(path.join(tempDir, defaultConfig.render.output, movedHref), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(unrelatedPath, "utf8")).toBe("user-owned\n");
+  });
+
+  it("does not overwrite an externally modified generated source", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-render-source-race-test-"));
+    const testWorkspace = workspace(tempDir);
+    const sourceDocument = document("0001", "change", "Change");
+    const model = buildStaticReaderModel(testWorkspace, [sourceDocument]);
+    await writeStaticReader(testWorkspace, model);
+    const sourcePath = path.join(
+      tempDir,
+      defaultConfig.render.output,
+      model.documents[0]!.sourceHref,
+    );
+    await writeFile(sourcePath, "external edit\n", "utf8");
+
+    await expect(writeStaticReader(testWorkspace, model)).rejects.toThrow(
+      `File changed after the operation was planned: ${path.posix.join(
+        defaultConfig.render.output,
+        model.documents[0]!.sourceHref,
+      )}`,
+    );
+    expect(await readFile(sourcePath, "utf8")).toBe("external edit\n");
+  });
+
+  it("adopts a matching source when its ownership manifest is missing", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-render-source-adopt-test-"));
+    const testWorkspace = workspace(tempDir);
+    const sourceDocument = document("0001", "change", "Change");
+    const model = buildStaticReaderModel(testWorkspace, [sourceDocument]);
+    const sourcePath = path.join(
+      tempDir,
+      defaultConfig.render.output,
+      model.documents[0]!.sourceHref,
+    );
+    const manifestPath = path.join(
+      tempDir,
+      defaultConfig.render.output,
+      "sources/.ledger-manifest.json",
+    );
+    await mkdir(path.dirname(sourcePath), { recursive: true });
+    await writeFile(sourcePath, sourceDocument.raw, "utf8");
+
+    await writeStaticReader(testWorkspace, model);
+    expect(await readFile(sourcePath, "utf8")).toBe(sourceDocument.raw);
+    expect(JSON.parse(await readFile(manifestPath, "utf8"))).toMatchObject({
+      schemaVersion: 1,
+      sources: [{ href: model.documents[0]!.sourceHref }],
+    });
+
+    await rm(manifestPath);
+    await writeFile(sourcePath, "unexpected collision\n", "utf8");
+    await expect(writeStaticReader(testWorkspace, model)).rejects.toThrow(
+      "File changed after the operation was planned",
+    );
+    expect(await readFile(sourcePath, "utf8")).toBe("unexpected collision\n");
+  });
+
+  it("recreates a missing source that remains owned by the manifest", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-render-source-repair-test-"));
+    const testWorkspace = workspace(tempDir);
+    const sourceDocument = document("0001", "change", "Change");
+    const model = buildStaticReaderModel(testWorkspace, [sourceDocument]);
+    await writeStaticReader(testWorkspace, model);
+    const sourcePath = path.join(
+      tempDir,
+      defaultConfig.render.output,
+      model.documents[0]!.sourceHref,
+    );
+    await rm(sourcePath);
+
+    await writeStaticReader(testWorkspace, model);
+    expect(await readFile(sourcePath, "utf8")).toBe(sourceDocument.raw);
+  });
+
   it("writes artifact metrics and budget status", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-render-test-"));
     const testWorkspace = workspace(tempDir);
+    const sourceDocument = document("0001", "change", "Change");
     const result = await writeStaticReader(
       testWorkspace,
-      buildStaticReaderModel(testWorkspace, [document("0001", "change", "Change")]),
+      buildStaticReaderModel(testWorkspace, [sourceDocument]),
     );
 
     expect(result.artifacts.map((artifact) => artifact.kind)).toEqual([
       "html",
       "search-index",
       "graph",
+      "sources",
     ]);
-    expect(result.totalBytes).toBeGreaterThan(0);
+    const sourceArtifact = result.artifacts.find((artifact) => artifact.kind === "sources")!;
+    const nonSourceBytes = result.artifacts
+      .filter((artifact) => artifact.kind !== "sources")
+      .reduce((sum, artifact) => sum + artifact.bytes, 0);
+    expect(sourceArtifact.bytes).toBeGreaterThanOrEqual(Buffer.byteLength(sourceDocument.raw, "utf8"));
+    expect(sourceArtifact.maxBytes).toBe(defaultConfig.render.budgets.maxTotalBytes);
+    expect(result.totalBytes).toBe(nonSourceBytes + sourceArtifact.bytes);
     expect(result.writeMs).toBeGreaterThanOrEqual(0);
     expect(result.budget.ok).toBe(true);
+
+    const constrainedWorkspace: LedgerWorkspace = {
+      ...testWorkspace,
+      config: {
+        ...testWorkspace.config,
+        render: {
+          ...testWorkspace.config.render,
+          budgets: {
+            ...testWorkspace.config.render.budgets,
+            maxTotalBytes: result.totalBytes - 1,
+          },
+        },
+      },
+    };
+    const constrained = await checkRenderBudgets(constrainedWorkspace);
+    expect(nonSourceBytes).toBeLessThan(constrained.maxTotalBytes);
+    expect(constrained.totalBytes).toBe(result.totalBytes);
+    expect(constrained.ok).toBe(false);
   });
 
   it("writes public artifacts to an isolated directory", async () => {
@@ -196,6 +375,11 @@ describe("writeStaticReader", () => {
         expect(entry.fields).not.toHaveProperty(forbidden);
       }
     }
+    expect((await readdir(path.join(tempDir, ".ledger/dist/public"))).sort()).toEqual([
+      "graph.json",
+      "index.html",
+      "search-index.json",
+    ]);
   });
 });
 

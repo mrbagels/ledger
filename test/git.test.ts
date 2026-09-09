@@ -60,6 +60,76 @@ describe("git status parsing", () => {
     ]);
   });
 
+  it("reports committed changes from a clean merge-base range", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-git-range-test-"));
+    await git("init");
+    await git("config", "user.email", "ledger@example.com");
+    await git("config", "user.name", "Ledger Test");
+    await mkdir(path.join(tempDir, "src"), { recursive: true });
+    await writeFile(path.join(tempDir, "src", "existing.ts"), "export {};\n");
+    await git("add", ".");
+    await git("commit", "-m", "base");
+    const base = await gitOutput("rev-parse", "HEAD");
+    await writeFile(path.join(tempDir, "src", "range.ts"), "export const range = true;\n");
+    await git("add", ".");
+    await git("commit", "-m", "head");
+    const head = await gitOutput("rev-parse", "HEAD");
+
+    await expect(getChangedFileDetails(tempDir)).resolves.toEqual([]);
+    await expect(getChangedFileDetails(tempDir, { base, head })).resolves.toEqual([
+      { path: "src/range.ts", status: "added" },
+    ]);
+  });
+
+  it("reports both sides of renames", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-git-rename-test-"));
+    await git("init");
+    await git("config", "user.email", "ledger@example.com");
+    await git("config", "user.name", "Ledger Test");
+    await mkdir(path.join(tempDir, "src"), { recursive: true });
+    await writeFile(path.join(tempDir, "src", "original.ts"), "export const value = true;\n");
+    await git("add", ".");
+    await git("commit", "-m", "base");
+    const base = await gitOutput("rev-parse", "HEAD");
+    await mkdir(path.join(tempDir, "archive"), { recursive: true });
+    await git("mv", "src/original.ts", "archive/moved.ts");
+
+    const expected = [
+      { path: "archive/moved.ts", status: "renamed" },
+      { path: "src/original.ts", status: "deleted" },
+    ];
+    await expect(getChangedFileDetails(tempDir)).resolves.toEqual(expected);
+    await expect(getChangedFileDetails(tempDir, { staged: true })).resolves.toEqual(expected);
+
+    await git("commit", "-m", "move out of source scope");
+    const head = await gitOutput("rev-parse", "HEAD");
+    await expect(getChangedFileDetails(tempDir, { base, head })).resolves.toEqual(expected);
+  });
+
+  it("rejects incomplete ranges and reports Git failures", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-git-error-test-"));
+
+    await expect(getChangedFileDetails(tempDir, { base: "HEAD" })).rejects.toMatchObject({
+      code: "invalid-argument",
+    });
+    await expect(getChangedFileDetails(tempDir, { base: "", head: "" })).rejects.toMatchObject({
+      code: "invalid-argument",
+    });
+    await expect(
+      getChangedFileDetails(
+        tempDir,
+        { base: null, head: null } as unknown as Parameters<typeof getChangedFileDetails>[1],
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    await expect(getChangedFileDetails(tempDir)).rejects.toMatchObject({
+      code: "operational-error",
+      details: {
+        operation: "git-changed-files",
+        mode: "working-tree",
+      },
+    });
+  });
+
   it("inspects Git availability", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "ledger-git-test-"));
     await git("init");
@@ -86,6 +156,16 @@ async function git(...args: readonly string[]): Promise<void> {
     execFile("git", [...args], { cwd: tempDir }, (error) => {
       if (error) reject(error);
       else resolve();
+    });
+  });
+}
+
+async function gitOutput(...args: readonly string[]): Promise<string> {
+  if (!tempDir) throw new Error("missing tempDir");
+  return await new Promise<string>((resolve, reject) => {
+    execFile("git", [...args], { cwd: tempDir }, (error, stdout) => {
+      if (error) reject(error);
+      else resolve(stdout.trim());
     });
   });
 }

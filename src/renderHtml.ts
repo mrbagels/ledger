@@ -211,7 +211,7 @@ function recordDetail(document: LedgerRenderedDocument, updatedDate: string): st
                 ${document.warningCount > 0 ? tag(`${document.warningCount} warning${document.warningCount === 1 ? "" : "s"}`, "warning") : ""}
                 ${document.errorCount > 0 ? tag(`${document.errorCount} error${document.errorCount === 1 ? "" : "s"}`, "danger") : ""}
               </div>
-              ${document.sourceHref ? `<div class="source-reference">${icon("file")}<span><small>Source record${document.date ? ` · Created ${escapeHtml(formatDate(document.date))}` : ""}${updatedDate ? ` · Updated ${escapeHtml(formatDate(updatedDate))}` : ""}</small><code>${escapeHtml(document.path)}</code></span></div>` : ""}
+              ${document.sourceHref ? `<div class="source-reference">${icon("file")}<span><small>Source record${document.date ? ` · Created ${escapeHtml(formatDate(document.date))}` : ""}${updatedDate ? ` · Updated ${escapeHtml(formatDate(updatedDate))}` : ""}</small><a href="${escapeHtml(document.sourceHref)}" download="${escapeHtml(sourceDownloadName(document.path))}" aria-label="Download Markdown source for ${escapeHtml(document.id)}"><code>${escapeHtml(document.path)}</code></a></span></div>` : ""}
               ${contextGrid(document)}
               ${issueList(document.issues)}
               <div class="record-columns">
@@ -489,6 +489,10 @@ function formatDate(value: string): string {
   return Number.isNaN(date.getTime())
     ? value
     : new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(date);
+}
+
+function sourceDownloadName(value: string): string {
+  return value.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) ?? "ledger-source.md";
 }
 
 function domId(value: string): string {

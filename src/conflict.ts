@@ -1,4 +1,5 @@
 import path from "node:path";
+import { coveragePatternMatches } from "./coverage.js";
 import { normalizeDocument, normalizePath } from "./documents.js";
 import { applyFileTransaction } from "./fileTransaction.js";
 import { extractBullets, getSectionBody } from "./query.js";
@@ -177,6 +178,7 @@ function pathsMatch(filePath: string, target: string): boolean {
   const normalizedFile = normalizePath(filePath);
   const normalizedTarget = normalizePath(target);
   return (
+    coveragePatternMatches(normalizedTarget, normalizedFile) ||
     normalizedFile === normalizedTarget ||
     normalizedFile.endsWith(`/${normalizedTarget}`) ||
     normalizedTarget.endsWith(`/${normalizedFile}`)

@@ -43,6 +43,20 @@ describe("agent packets", () => {
     });
   });
 
+  it("builds file packets for grouped coverage patterns", () => {
+    const packet = buildAgentPacket(
+      [document("0001", "Feature group", "src/features/**", "Pattern: src/features/**")],
+      "src/features/editor/model.ts",
+    );
+
+    expect(packet.entries).toHaveLength(1);
+    expect(packet.entries[0]).toMatchObject({
+      id: "0001",
+      matchedFiles: ["src/features/**"],
+      conflictRules: ["Keep CLI behavior."],
+    });
+  });
+
   it("formats a Markdown packet", () => {
     const markdown = formatAgentPacket(buildAgentPacket([document()], "src/cli.ts"));
 
@@ -146,7 +160,12 @@ async function createWorkspace(): Promise<LedgerWorkspace> {
   };
 }
 
-function document(id = "0001", title = "CLI"): ParsedLedgerDocument {
+function document(
+  id = "0001",
+  title = "CLI",
+  fileReference = "src/cli.ts",
+  changedFileHeading = fileReference,
+): ParsedLedgerDocument {
   const raw = `---
 id: "${id}"
 kind: "change"
@@ -155,7 +174,7 @@ date: "2026-06-29"
 status: "landed"
 areas: ["cli"]
 files:
-  - "src/cli.ts"
+  - "${fileReference}"
 symbols:
   - "run"
 docs:
@@ -167,7 +186,7 @@ commits: []
 
 ## Changed Files
 
-### src/cli.ts
+### ${changedFileHeading}
 
 - What changed: Test.
 - On conflict: Keep CLI behavior.

@@ -44,6 +44,7 @@ interface LedgerMcpParsedArgs {
   readonly kind?: LedgerDocumentKind;
   readonly status?: string;
   readonly area?: string;
+  readonly tag?: string;
   readonly release?: string;
   readonly decision?: string;
   readonly backlog?: string;
@@ -79,6 +80,7 @@ const querySchema = {
   kind: z.enum(["change", "backlog", "decision", "release", "product-note", "feedback"]).optional(),
   status: shortString.optional(),
   area: shortString.optional(),
+  tag: shortString.optional(),
   release: shortString.optional(),
   decision: shortString.optional(),
   backlog: shortString.optional(),
@@ -269,6 +271,7 @@ async function executeLedgerMcpTool(
         kind: parseKind(parsed.kind),
         status: parsed.status,
         area: parsed.area,
+        tag: parsed.tag,
         release: parsed.release,
         decision: parsed.decision,
         backlog: parsed.backlog,

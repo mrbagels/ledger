@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Ledger Product Improvement Brainstorm</title>
+  <style>
+    :root {
+      --canvas: #f4f2ec;
+      --paper: rgba(255, 255, 252, .86);
+      --ink: #18201d;
+      --muted: #626a65;
+      --line: rgba(24, 32, 29, .14);
+      --accent: #c34f1b;
+      --accent-soft: #f6dfd3;
+      --blue: #24637a;
+      --shadow: 0 24px 80px rgba(49, 39, 29, .09);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --canvas: #111613;
+        --paper: rgba(25, 31, 27, .92);
+        --ink: #eef2ed;
+        --muted: #aeb8b0;
+        --line: rgba(238, 242, 237, .15);
+        --accent: #ff8b4d;
+        --accent-soft: rgba(255, 139, 77, .13);
+        --blue: #72bdd3;
+        --shadow: 0 28px 90px rgba(0, 0, 0, .24);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 14% 4%, var(--accent-soft), transparent 28rem),
+        var(--canvas);
+      line-height: 1.62;
+    }
+    a { color: inherit; }
+    .shell { width: min(1440px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 72px 0 54px; border-bottom: 1px solid var(--line); }
+    .eyebrow, .section-kicker {
+      color: var(--accent); font-size: .75rem; font-weight: 800;
+      letter-spacing: .14em; text-transform: uppercase;
+    }
+    h1 { max-width: 920px; margin: 12px 0 18px; font-family: Georgia, serif; font-size: clamp(3rem, 8vw, 7rem); line-height: .94; letter-spacing: -.045em; }
+    .lede { max-width: 760px; color: var(--muted); font-size: clamp(1rem, 2vw, 1.28rem); }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+    .button { display: inline-flex; align-items: center; min-height: 42px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); text-decoration: none; font-weight: 700; font-size: .88rem; }
+    .button.primary { color: white; border-color: var(--accent); background: var(--accent); }
+    .layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 56px; padding: 42px 0 96px; }
+    nav { position: sticky; top: 24px; align-self: start; display: grid; gap: 4px; }
+    nav small { color: var(--muted); margin: 0 0 10px 10px; }
+    nav a { padding: 9px 10px; border-radius: 8px; color: var(--muted); text-decoration: none; font-size: .88rem; }
+    nav a:hover, nav a:focus-visible { color: var(--ink); background: var(--accent-soft); outline: none; }
+    main { min-width: 0; }
+    .section { scroll-margin-top: 22px; margin-bottom: 86px; }
+    .section > h2 { margin: 4px 0 30px; font-family: Georgia, serif; font-size: clamp(2rem, 4vw, 3.8rem); line-height: 1.02; letter-spacing: -.025em; }
+    .section > p { max-width: 820px; color: var(--muted); }
+    .idea { scroll-margin-top: 22px; padding: 28px 30px 26px; margin: 16px 0; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: var(--shadow); backdrop-filter: blur(14px); }
+    .idea h3 { margin: 0 0 22px; font-family: Georgia, serif; font-size: clamp(1.45rem, 2.4vw, 2.15rem); line-height: 1.12; letter-spacing: -.018em; }
+    .field { display: grid; grid-template-columns: 142px minmax(0, 1fr); gap: 18px; padding: 13px 0; border-top: 1px solid var(--line); }
+    .field h4 { margin: 0; color: var(--muted); font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; }
+    .field p { margin: 0; }
+    .meta-row { display: inline-flex; align-items: center; gap: 8px; margin: 18px 8px 2px 0; }
+    .meta-row span { color: var(--muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .07em; }
+    .meta-row strong { padding: 5px 10px; border-radius: 999px; color: var(--accent); background: var(--accent-soft); font-size: .78rem; }
+    .idea > p, .section > ol, .section > ul { max-width: 850px; }
+    ol, ul { padding-left: 1.35rem; }
+    li { margin: 8px 0; }
+    code { padding: .12rem .38rem; border: 1px solid var(--line); border-radius: 5px; background: var(--accent-soft); font-family: "SFMono-Regular", Consolas, monospace; font-size: .86em; }
+    footer { border-top: 1px solid var(--line); padding: 24px 0 44px; color: var(--muted); font-size: .85rem; }
+    @media (max-width: 840px) {
+      header { padding-top: 44px; }
+      .layout { grid-template-columns: 1fr; padding-top: 24px; }
+      nav { position: static; display: flex; overflow-x: auto; padding-bottom: 8px; }
+      nav small { display: none; }
+      nav a { white-space: nowrap; border: 1px solid var(--line); }
+      .field { grid-template-columns: 1fr; gap: 5px; }
+      .idea { padding: 22px 20px; }
+    }
+    @media print {
+      body { background: white; color: black; }
+      nav, .actions { display: none; }
+      .layout { display: block; }
+      .idea { break-inside: avoid; box-shadow: none; backdrop-filter: none; }
+    }
+  </style>
+</head>
+<body>
+  <header id="top">
+    <div class="shell">
+      <div class="eyebrow">Exploration for review · 30 August 2026</div>
+      <h1>Ledger, from capable tool to indispensable project memory.</h1>
+      <p class="lede">A focused opportunity map for product quality, agent ergonomics, trustworthy CI, navigable context, evidence, maintainability, and long-term platform value. Ideas are candidates, not commitments.</p>
+      <div class="actions">
+        <a class="button primary" href="product-improvement-brainstorm-2026-08-30.md">View Markdown source</a>
+        <a class="button" href="product-improvement-brainstorm-2026-08-30.md" download>Download Markdown</a>
+        <a class="button" href="#top-highest-roi-improvements">Jump to priorities</a>
+      </div>
+    </div>
+  </header>
+  <div class="shell layout">
+    <nav aria-label="Document sections"><small>On this page</small><a href="#scope-and-current-foundation">Scope And Current Foundation</a><a href="#minor-features-improvements">Minor Features &amp; Improvements</a><a href="#major-features-systems-refactors">Major Features, Systems &amp; Refactors</a><a href="#top-highest-roi-improvements">Top Highest ROI Improvements</a><a href="#top-most-strategically-valuable-long-term-investments">Top Most Strategically Valuable Long-Term Investments</a><a href="#quick-wins-with-noticeable-impact-and-low-implementation-effort">Quick Wins With Noticeable Impact And Low Implementation Effort</a><a href="#evidence-snapshot">Evidence Snapshot</a></nav>
+    <main><p>Date: 2026-08-30 Status: Exploration for review, not an implementation commitment</p>
+<section class="section" id="scope-and-current-foundation"><div class="section-kicker">Ledger opportunity map</div><h2>Scope And Current Foundation</h2>
+<p>This brainstorm is grounded in the current Ledger repository, its product and architecture documentation, the 117-record dogfood catalog, the CLI and MCP surfaces, the generated internal and public readers, and the existing tests.</p>
+<p>Ledger already has a substantial foundation: Markdown records, validation, Git-aware drafting, coverage and docs-impact checks, query and explain commands, conflict guidance, releases, integrity hashes, token-bounded packets, a static reader, weighted search, graph data, public export, local serving, machine envelopes, transaction recovery, and eight read-oriented MCP tools. Those are not repeated below as new ideas.</p>
+<p>Several items below began as concrete gaps found during the scan. They are included because correcting them materially improves the product experience, but listing any item still does not authorize implementation.</p>
+</section>
+<section class="section" id="minor-features-improvements"><div class="section-kicker">Ledger opportunity map</div><h2>Minor Features &amp; Improvements</h2>
+<article class="idea" id="1-retrieval-contract-parity-and-grouped-path-correctness"><h3>1. Retrieval Contract Parity And Grouped-Path Correctness</h3>
+<div class="field"><h4>Summary</h4><p>Make <code>explain</code>, <code>packet</code>, <code>conflict</code>, CLI, library, and MCP retrieval</p></div>
+<p>use one relationship-aware matching and result contract.</p>
+<div class="field"><h4>How it works</h4><p>Centralize exact, suffix, prefix, and glob matching. Traverse</p></div>
+<p>related decisions and backlog records, resolve supersession, and return anchors, conflict guidance, invariants, verification, and relevant docs consistently. Large-diff records containing patterns such as <code>src/features/**</code> remain discoverable from every file-oriented command.</p>
+<div class="field"><h4>User experience</h4><p>A user gets the same essential context regardless of which</p></div>
+<p>entry point they choose, and records drafted from large changes no longer disappear from packets or conflict guidance.</p>
+<div class="field"><h4>Why it improves the product</h4><p>The current surfaces disagree. <code>explain</code></p></div>
+<p>understands coverage patterns, while conflict and packet matching can miss the grouped paths Ledger itself generates. Human explain output is also narrower than the workflow promised in the product brief.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="medium">Medium</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>A shared retrieval result</p></div>
+<p>model. Unlocks a unified review packet, editor hovers, graph traversal, and more predictable agent context.</p>
+</article>
+<article class="idea" id="2-first-class-backlog-decision-and-promotion-lifecycle"><h3>2. First-Class Backlog, Decision, And Promotion Lifecycle</h3>
+<div class="field"><h4>Summary</h4><p>Add <code>ledger backlog new</code>, <code>ledger decision new</code>, and</p></div>
+<p><code>ledger promote B001</code> rather than requiring manual template and frontmatter editing.</p>
+<div class="field"><h4>How it works</h4><p>Allocate configured IDs, render the existing templates, and</p></div>
+<p>create records through the transaction layer. Promotion creates a linked change entry, carries acceptance checks into the draft, and can update the backlog state in one optimistic transaction.</p>
+<div class="field"><h4>User experience</h4><p>Users capture intent and durable decisions as quickly as</p></div>
+<p>changes today, without copying templates, choosing IDs, or manually preserving relationships.</p>
+<div class="field"><h4>Why it improves the product</h4><p>Backlog and decision records are core to the</p></div>
+<p>product model, but their authoring lifecycle is missing from the CLI. Promotion is explicitly documented as manual future work.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="medium">Medium</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Existing templates, command</p></div>
+<p>result models, and transactions. Unlocks lifecycle analytics, editor commands, safe MCP authoring, and stronger release traceability.</p>
+</article>
+<article class="idea" id="3-lifecycle-aware-ready-to-land-validation"><h3>3. Lifecycle-Aware Ready-To-Land Validation</h3>
+<div class="field"><h4>Summary</h4><p>Distinguish structurally valid drafts from records that are ready to</p></div>
+<p>land, ship, or release.</p>
+<div class="field"><h4>How it works</h4><p>Add a <code>ledger ready</code> workflow or status-aware validation mode.</p></div>
+<p>Drafts may contain placeholders, while landed or released records reject TODO text, template prose, empty conflict guidance, non-actionable verification, unreviewed docs-impact reasons, and invalid status transitions.</p>
+<div class="field"><h4>User experience</h4><p>Authors receive direct actions such as “replace the</p></div>
+<p>generated invariant” before merge instead of discovering later that a formally valid receipt contains little useful memory.</p>
+<div class="field"><h4>Why it improves the product</h4><p>Current validation is strong structurally but</p></div>
+<p>can accept generated placeholder text and arbitrary status values. Ledger's long-term value depends on record quality, not only schema conformance.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="medium">Medium</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Validation profiles and a</p></div>
+<p>record-kind lifecycle policy. Unlocks reliable promotion, release gates, PR checks, and automated quality scoring without requiring a hosted service.</p>
+</article>
+<article class="idea" id="4-pr-aware-git-change-ranges"><h3>4. PR-Aware Git Change Ranges</h3>
+<div class="field"><h4>Summary</h4><p>Let drafting, coverage, docs impact, CI, and MCP inspect the actual</p></div>
+<p>pull-request range rather than only staged files or a dirty worktree.</p>
+<div class="field"><h4>How it works</h4><p>Add explicit base, head, and merge-base options with safe</p></div>
+<p>GitHub and GitLab environment detection. Preserve rename source and destination paths, identify how the range was selected, and fail visibly when Git inspection cannot determine the changed set.</p>
+<div class="field"><h4>User experience</h4><p><code>ledger ci --base origin/master</code> works locally, while</p></div>
+<p>hosted CI selects the PR range automatically and reports exactly what it checked.</p>
+<div class="field"><h4>Why it improves the product</h4><p>A clean CI checkout currently has no working</p></div>
+<p>tree changes, so coverage and docs-impact checks can pass without evaluating the PR diff. Git command failures can also look like an empty change set.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="medium">Medium</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>CI checkout depth and small</p></div>
+<p>provider adapters. Unlocks accurate annotations, current-change coverage, automated PR drafting, and change-set context.</p>
+</article>
+<article class="idea" id="5-actionable-reader-source-and-share-controls"><h3>5. Actionable Reader Source And Share Controls</h3>
+<div class="field"><h4>Summary</h4><p>Turn record context into actions rather than static strings.</p></div>
+<div class="field"><h4>How it works</h4><p>Make the source record, files, docs, symbols, and relationship</p></div>
+<p>IDs navigable. Add Copy source path, Copy deep link, Copy packet command, and Copy agent context actions. Package internal source records into a safe reader sidecar so source links work both from <code>file://</code> and <code>ledger serve</code>.</p>
+<div class="field"><h4>User experience</h4><p>From any record, a maintainer can open its Markdown, jump to</p></div>
+<p>a related record, or copy the exact handoff command in one click.</p>
+<div class="field"><h4>Why it improves the product</h4><p><code>sourceHref</code> already exists in the model, but</p></div>
+<p>the reader only prints the path. The documented Markdown-source workflow is therefore not actionable, and the current local server cannot serve a traversal link outside the render root.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="small">Small</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>A confined source-export</p></div>
+<p>artifact and relationship URLs. Unlocks Git-host links, editor deep links, and shareable review artifacts.</p>
+</article>
+<article class="idea" id="6-live-preview-feedback-loop"><h3>6. Live Preview Feedback Loop</h3>
+<div class="field"><h4>Summary</h4><p>Make <code>ledger serve --watch</code> visibly live.</p></div>
+<div class="field"><h4>How it works</h4><p>Use a tiny server-sent event or reload endpoint to notify the</p></div>
+<p>reader when a rebuild starts, succeeds, or fails. Preserve URL filters, panel state, and scroll position across refreshes, and show validation errors in a non-destructive status strip.</p>
+<div class="field"><h4>User experience</h4><p>Authors edit a record and immediately see the reader update</p></div>
+<p>without manually refreshing or checking terminal logs.</p>
+<div class="field"><h4>Why it improves the product</h4><p>Watch mode currently rebuilds successfully but</p></div>
+<p>does not notify the open browser, leaving its primary preview loop stale.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="small">Small</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Coordination between the</p></div>
+<p>existing watcher and local server. Unlocks guided authoring and richer local quality feedback.</p>
+</article>
+<article class="idea" id="7-search-parity-explainability-and-degraded-mode-visibility"><h3>7. Search Parity, Explainability, And Degraded-Mode Visibility</h3>
+<div class="field"><h4>Summary</h4><p>Make browser and terminal search share one ranking contract and</p></div>
+<p>show users why a result matched.</p>
+<div class="field"><h4>How it works</h4><p>Generate or share ranking weights from one source, tokenize</p></div>
+<p>multi-word queries consistently, add exact, prefix, and phrase boosts, and return the matched field plus a compact snippet. If the sidecar cannot load, announce fallback search rather than silently changing behavior.</p>
+<div class="field"><h4>User experience</h4><p>Search results feel predictable across CLI, palette, and</p></div>
+<p>page filtering. Users can see whether an ID, title, file, symbol, invariant, or summary produced the match.</p>
+<div class="field"><h4>Why it improves the product</h4><p>Node and embedded browser scoring are separate</p></div>
+<p>implementations, and direct-file fallback uses different multi-token behavior. Silent sidecar failure makes relevance changes look arbitrary.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="medium">Medium</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>A versioned search artifact</p></div>
+<p>contract and parity fixtures. Unlocks query syntax, configurable ranking, sharded indexes, and relevance telemetry.</p>
+</article>
+<article class="idea" id="8-typed-progressive-mcp-and-machine-friendly-authoring"><h3>8. Typed Progressive MCP And Machine-Friendly Authoring</h3>
+<div class="field"><h4>Summary</h4><p>Make automation surfaces typed, bounded, and consistent without</p></div>
+<p>breaking existing JSON-text clients.</p>
+<div class="field"><h4>How it works</h4><p>Add MCP output schemas, <code>structuredContent</code>, read/write effect</p></div>
+<p>annotations, summary/compact/full detail levels, cursors, and field selection. Close query parity for tags, commits, PRs, relationships, and extension fields. Return machine envelopes from authoring commands such as <code>new</code>, <code>feedback</code>, <code>init</code>, and <code>adopt</code>.</p>
+<div class="field"><h4>User experience</h4><p>Agents inspect a small typed summary first, request details</p></div>
+<p>only when needed, and stop scraping human output to learn which file was created.</p>
+<div class="field"><h4>Why it improves the product</h4><p>Current MCP calls serialize the full envelope</p></div>
+<p>into one text block, query capabilities differ across CLI and MCP, and several authoring commands only print human text.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="medium">Medium</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Stable output schemas and</p></div>
+<p>compatibility tests. Unlocks rich MCP clients, non-TypeScript integrations, safe write tools, pagination, and lower token use.</p>
+</article>
+<article class="idea" id="9-self-healing-maintenance-and-generated-state-convergence"><h3>9. Self-Healing Maintenance And Generated-State Convergence</h3>
+<div class="field"><h4>Summary</h4><p>Turn diagnostics into a safe, previewable repair loop.</p></div>
+<div class="field"><h4>How it works</h4><p>Add <code>ledger doctor --fix</code> or <code>ledger refresh --dry-run</code> for</p></div>
+<p>deterministic repairs such as rebuilding stale indexes, reconciling routing docs, regenerating readers and integrity artifacts, and cleaning recoverable transaction state. Every repair shows the planned files and never rewrites source records implicitly.</p>
+<div class="field"><h4>User experience</h4><p>A warning such as “indexes are older than source records”</p></div>
+<p>offers one clear action instead of requiring the user to know which generation commands to chain.</p>
+<div class="field"><h4>Why it improves the product</h4><p>The project has excellent diagnostics and safe</p></div>
+<p>transactions, but the maintenance workflow remains command-by-command. The first dogfood run produced a healthy render alongside a stale-index warning.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="medium">Medium</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Existing doctor checks,</p></div>
+<p>artifact writers, and transaction plans. Unlocks pre-commit automation and one-command repository health convergence.</p>
+</article>
+<article class="idea" id="10-task-first-and-accessible-reader-polish"><h3>10. Task-First And Accessible Reader Polish</h3>
+<div class="field"><h4>Summary</h4><p>Optimize the reader for repeat work and close specific accessibility</p></div>
+<p>gaps.</p>
+<div class="field"><h4>How it works</h4><p>Add a compact returning-user header, semantic public year</p></div>
+<p>headings and permalinks, dynamic panel labeling and expanded state, live search status, platform-neutral shortcut copy, AA color tokens, larger touch targets, and browser-level keyboard and screen-reader tests.</p>
+<div class="field"><h4>User experience</h4><p>Returning users reach records in the first viewport, while</p></div>
+<p>keyboard, touch, low-vision, and assistive-technology users receive clearer state and navigation.</p>
+<div class="field"><h4>Why it improves the product</h4><p>At 1280×800 the internal hero pushes the library</p></div>
+<p>below the fold. Several important states are visual-only, some small controls fall below common touch guidance, and muted small text is below AA contrast.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="medium">Medium</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Browser interaction tests</p></div>
+<p>and an accessibility token audit. Unlocks a credible public reader and stronger regression protection for the embedded runtime.</p>
+</article>
+</section>
+<section class="section" id="major-features-systems-refactors"><div class="section-kicker">Ledger opportunity map</div><h2>Major Features, Systems &amp; Refactors</h2>
+<article class="idea" id="1-unified-change-set-context-and-review-workbench"><h3>1. Unified Change-Set Context And Review Workbench</h3>
+<div class="field"><h4>Summary</h4><p>Create one task-oriented workflow that understands a Git diff, file</p></div>
+<p>set, or topic and returns the current effective implementation contract.</p>
+<div class="field"><h4>How it works</h4><p>A <code>ledger review</code> or <code>ledger context</code> command and MCP tool</p></div>
+<p>combine prior records, active decisions, backlog, docs, invariants, conflict rules, coverage, docs impact, stale signals, and suggested verification. It deduplicates records, resolves supersession, flags contradictory guidance, and retains provenance for every recommendation within a token budget.</p>
+<div class="field"><h4>User experience</h4><p>Before editing or reviewing, a person or agent asks once and</p></div>
+<p>receives what changed, what must remain true, what is missing, and how to verify the work.</p>
+<div class="field"><h4>Why it improves the product</h4><p>Ledger already has nearly every component, but</p></div>
+<p>users must chain many command-oriented workflows and reconcile overlapping outputs themselves. A task-first composition would make the product's central promise immediately legible.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="large">Large</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="transformational">Transformational</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>PR-aware ranges, retrieval</p></div>
+<p>parity, lifecycle readiness, and progressive results. Unlocks review agents, editor CodeLens, conflict workbenches, and automated handoffs.</p>
+</article>
+<article class="idea" id="2-pr-native-provenance-and-ci-integration-system"><h3>2. PR-Native Provenance And CI Integration System</h3>
+<div class="field"><h4>Summary</h4><p>Ship the first-party GitHub Action and provider-neutral annotation</p></div>
+<p>layer implied by the roadmap.</p>
+<div class="field"><h4>How it works</h4><p>Evaluate base-to-head changes, require a current receipt rather</p></div>
+<p>than any historical path mention, capture commit and PR metadata, and emit Checks API annotations plus a compact PR summary for coverage, docs impact, readiness, stale anchors, and verification. Keep the core provider-neutral so GitLab and other adapters can follow.</p>
+<div class="field"><h4>User experience</h4><p>A pull request explains exactly which changed paths need a</p></div>
+<p>record or docs decision and links reviewers directly to relevant context.</p>
+<div class="field"><h4>Why it improves the product</h4><p>The current repository CI runs Ledger on a</p></div>
+<p>clean checkout, where working-tree-based change detection is effectively blind. Historical records can also satisfy a new change's path coverage.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="large">Large</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="transformational">Transformational</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>PR-aware ranges, readiness</p></div>
+<p>validation, and a portable reporter schema. Unlocks automated release notes, review packets, status checks, and broader provider adapters.</p>
+</article>
+<article class="idea" id="3-evidence-backed-verification-and-freshness-system"><h3>3. Evidence-Backed Verification And Freshness System</h3>
+<div class="field"><h4>Summary</h4><p>Evolve verification from prose commands into durable, refreshable</p></div>
+<p>evidence without requiring CI logs to become the source of truth.</p>
+<div class="field"><h4>How it works</h4><p>Define verification checks with command, environment, expected</p></div>
+<p>outcome, scope, timestamp, result, artifact reference, and digest. A guarded runner can execute approved checks, record evidence sidecars, detect when source changes make evidence stale, and summarize release confidence. Sensitive output stays excluded by default.</p>
+<div class="field"><h4>User experience</h4><p>Maintainers can distinguish “someone wrote <code>npm test</code>” from</p></div>
+<p>“this exact revision passed these checks on these platforms,” then rerun only what became stale.</p>
+<div class="field"><h4>Why it improves the product</h4><p>Verification is central to Ledger's value, but</p></div>
+<p>today it is largely unstructured text. Integrity hashes prove record content, not that the implementation was actually verified.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="large">Large</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="transformational">Transformational</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>A verification schema,</p></div>
+<p>trusted-command policy, evidence storage rules, and CI adapters. Unlocks release gates, provenance attestations, flaky-check history, and risk-based review.</p>
+</article>
+<article class="idea" id="4-entity-explorer-and-temporal-relationship-graph"><h3>4. Entity Explorer And Temporal Relationship Graph</h3>
+<div class="field"><h4>Summary</h4><p>Promote files, symbols, docs, areas, releases, decisions, backlog,</p></div>
+<p>invariants, and verification into navigable entities with history.</p>
+<div class="field"><h4>How it works</h4><p>Build entity pages with backlinks, neighborhood graphs,</p></div>
+<p>unresolved-target treatment, supersession edges, path and symbol rename lineage, and “what depends on this?” traversal. Keep raw graph JSON as a portable artifact while adding an accessible list-first UI.</p>
+<div class="field"><h4>User experience</h4><p>A maintainer can follow a decision to affected files, see</p></div>
+<p>which invariant superseded another, or trace a symbol across changes without opening raw JSON or manually querying IDs.</p>
+<div class="field"><h4>Why it improves the product</h4><p>The reader currently renders relationships as</p></div>
+<p>plain strings and offers only raw <code>graph.json</code>. The graph also omits some modeled relationships such as supersession.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="large">Large</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="transformational">Transformational</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Complete graph semantics and</p></div>
+<p>stable entity identifiers. Unlocks impact analysis, rename-aware staleness, review visualization, and IDE navigation.</p>
+</article>
+<article class="idea" id="5-canonical-operation-registry-and-portable-contract-kit"><h3>5. Canonical Operation Registry And Portable Contract Kit</h3>
+<div class="field"><h4>Summary</h4><p>Define each Ledger operation once, then adapt it to CLI, MCP,</p></div>
+<p>TypeScript, CI reporters, generated docs, and external runtimes.</p>
+<div class="field"><h4>How it works</h4><p>Typed operation descriptors own input and output schemas,</p></div>
+<p>effect classification, execution, summaries, help, and compatibility version. Generate argument validation, help, completions, MCP adapters, JSON Schemas, and conformance fixtures from the registry. Extract handlers incrementally from the 1,688-line CLI rather than performing a flag-day rewrite.</p>
+<div class="field"><h4>User experience</h4><p>Commands become consistent, discoverable, and typo-resistant.</p></div>
+<p>Integrators receive stable contracts instead of reverse-engineering output.</p>
+<div class="field"><h4>Why it improves the product</h4><p>CLI routing, parsing, help, and most handlers</p></div>
+<p>remain concentrated in one file, while MCP and the partial command-model layer duplicate schemas and behavior. This is the main source of parity drift.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="large">Large</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="transformational">Transformational</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>An additive API versioning</p></div>
+<p>policy and migration sequence. Unlocks shell completions, first-party Actions, SARIF, portable runtimes, generated documentation, and safer extension points.</p>
+</article>
+<article class="idea" id="6-safe-write-capable-agent-and-editor-lifecycle"><h3>6. Safe Write-Capable Agent And Editor Lifecycle</h3>
+<div class="field"><h4>Summary</h4><p>Let agents and editors complete Ledger authoring without losing the</p></div>
+<p>current safety boundary.</p>
+<div class="field"><h4>How it works</h4><p>Add preview-first MCP operations and an editor integration for</p></div>
+<p>creating or amending records, promoting backlog, applying reviewed docs-impact declarations, linking decisions, and preparing releases. Every mutation returns a proposed diff and requires an explicit apply step or revision token backed by the existing optimistic transaction layer.</p>
+<div class="field"><h4>User experience</h4><p>An agent can retrieve context, do the work, preview the</p></div>
+<p>handoff record, and apply it from one environment. Maintainers retain auditable diffs, concurrency protection, and clear write intent.</p>
+<div class="field"><h4>Why it improves the product</h4><p>Coding agents are the primary audience, but the</p></div>
+<p>MCP surface is intentionally read-oriented and editor integration remains only a roadmap prototype.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="large">Large</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="transformational">Transformational</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Lifecycle commands, typed</p></div>
+<p>MCP effects, ready-to-land validation, and transaction revision tokens. Unlocks VS Code and Codex workflows, guided authoring, and policy-aware automation.</p>
+</article>
+<article class="idea" id="7-scalable-modular-reader-and-public-publishing-pipeline"><h3>7. Scalable Modular Reader And Public Publishing Pipeline</h3>
+<div class="field"><h4>Summary</h4><p>Make the static output scale well beyond the current dogfood catalog</p></div>
+<p>while turning the public profile into a polished release channel.</p>
+<div class="field"><h4>How it works</h4><p>Move per-record detail out of the initial HTML into lazy chunks,</p></div>
+<p>shard search and graph data, support multi-page or virtualized navigation, and compile a typed browser runtime instead of maintaining a large embedded string. For the public profile, add semantic release sections, stable permalinks, RSS/Atom and JSON feeds, metadata, branding, deployment recipes, and a sanitized review manifest.</p>
+<div class="field"><h4>User experience</h4><p>Internal catalogs remain fast at thousands of records, and</p></div>
+<p>teams can publish a useful changelog without exposing implementation memory or adopting a hosted service.</p>
+<div class="field"><h4>Why it improves the product</h4><p>The 117-record internal render already uses</p></div>
+<p>roughly 1.69 MB of a 2 MB budget, and its HTML, search, and graph artifacts are near individual limits. The current public output is safe but intentionally minimal.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="large">Large</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="high">High</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Versioned chunk manifests,</p></div>
+<p>browser behavior tests, caching rules, and public-note schema evolution. Unlocks 1,000 to 10,000-record catalogs, cacheable hosting, subscriptions, and static deployment adapters.</p>
+</article>
+<article class="idea" id="8-extensible-language-policy-and-repository-federation-layer"><h3>8. Extensible Language, Policy, And Repository Federation Layer</h3>
+<div class="field"><h4>Summary</h4><p>Preserve a small core while enabling language-aware symbols,</p></div>
+<p>project-specific policies, exporters, and optional multi-repository views.</p>
+<div class="field"><h4>How it works</h4><p>Define confined plugin contracts for symbol extraction,</p></div>
+<p>validators, index facets, packet contributors, render/export adapters, and CI reporters. A federation manifest can aggregate signed, versioned indexes from multiple repositories without moving Markdown source into a database.</p>
+<div class="field"><h4>User experience</h4><p>Swift, Python, Rust, Go, and domain-specific projects gain</p></div>
+<p>native anchors and policies, while platform teams can answer cross-repository questions from one read-only view.</p>
+<div class="field"><h4>Why it improves the product</h4><p>Parser-backed extraction currently focuses on</p></div>
+<p>TypeScript, JavaScript, and Markdown, and the architecture lists custom kinds, renderers, policies, and adapters without a safe extension contract. Large organizations will otherwise fork the core or build incompatible wrappers.</p>
+<div class="meta-row"><span>Complexity</span><strong data-meta="massive">Massive</strong></div>
+<div class="meta-row"><span>Impact</span><strong data-meta="transformational">Transformational</strong></div>
+<div class="field"><h4>Dependencies or future opportunities unlocked</h4><p>Canonical operation and</p></div>
+<p>artifact contracts, plugin isolation, compatibility tests, and integrity metadata. Unlocks an adapter ecosystem, monorepo ownership views, Dossier exports, and cross-repo change memory.</p>
+</article>
+</section>
+<section class="section" id="top-highest-roi-improvements"><div class="section-kicker">Ledger opportunity map</div><h2>Top Highest ROI Improvements</h2>
+<ol>
+<li><strong>PR-aware Git ranges and current-change coverage:</strong> fixes a major correctness</li>
+<p>gap in CI and unlocks trustworthy annotations.</p>
+<li><strong>Retrieval contract parity:</strong> repairs grouped-path misses and makes every</li>
+<p>agent and human context surface dependable.</p>
+<li><strong>Lifecycle-aware readiness:</strong> protects the quality of the memory Ledger is</li>
+<p>designed to preserve.</p>
+<li><strong>Actionable source/share controls plus live preview:</strong> removes daily reader</li>
+<p>friction with relatively small implementation slices.</p>
+<li><strong>Typed progressive MCP results:</strong> improves interoperability and token use</li>
+<p>without requiring a new product surface.</p>
+</ol>
+</section>
+<section class="section" id="top-most-strategically-valuable-long-term-investments"><div class="section-kicker">Ledger opportunity map</div><h2>Top Most Strategically Valuable Long-Term Investments</h2>
+<ol>
+<li><strong>Unified change-set context and review workbench</strong> as the task-oriented</li>
+<p>expression of Ledger's core value.</p>
+<li><strong>Evidence-backed verification</strong> to turn historical claims into durable,</li>
+<p>freshness-aware proof.</p>
+<li><strong>Canonical operation registry and portable contracts</strong> to control drift and</li>
+<p>support every integration surface coherently.</p>
+<li><strong>Entity explorer and temporal graph</strong> to make relational project memory</li>
+<p>genuinely navigable.</p>
+<li><strong>Safe write-capable agent and editor lifecycle</strong> to complete the agent-first</li>
+<p>loop.</p>
+</ol>
+</section>
+<section class="section" id="quick-wins-with-noticeable-impact-and-low-implementation-effort"><div class="section-kicker">Ledger opportunity map</div><h2>Quick Wins With Noticeable Impact And Low Implementation Effort</h2>
+<ul>
+<li>Reuse the existing coverage-pattern matcher in conflict and packet retrieval.</li>
+<li>Wire tag filtering into MCP query and reject invalid help topics, roles, and</li>
+<p>extra positionals consistently.</p>
+<li>Render the modeled source link as a safe, working reader action.</li>
+<li>Add browser reload or a rebuild banner to <code>serve --watch</code>.</li>
+<li>Add JSON envelopes to <code>new</code> and <code>feedback</code>.</li>
+<li>Announce degraded fallback search rather than silently changing relevance.</li>
+<li>Add semantic year headings, live search status, and AA reader color tokens.</li>
+<li>Make Git inspection failure explicit instead of returning “zero changes.”</li>
+</ul>
+</section>
+<section class="section" id="evidence-snapshot"><div class="section-kicker">Ledger opportunity map</div><h2>Evidence Snapshot</h2>
+<ul>
+<li><code>src/cli.ts</code> is 1,688 lines; only five workflows currently have extracted</li>
+<p>command result modules.</p>
+<li><code>src/renderAssets.ts</code> is 1,573 lines of embedded CSS and browser JavaScript;</li>
+<p>current tests mostly assert output strings rather than execute interactions.</p>
+<li>Internal render for 117 records is about 1.69 MB against a configured 2 MB</li>
+<p>total budget.</p>
+<li><code>sourceHref</code> is computed by the reader model but never rendered as a link.</li>
+<li>The relationship graph does not currently include all modeled relationship</li>
+<p>types, including supersession.</p>
+<li>CLI query supports tags while MCP query does not.</li>
+<li>Clean-checkout repository CI runs working-tree-based change detection.</li>
+<li>Any one docs touch or declaration currently satisfies docs impact for every</li>
+<p>changed source file rather than producing per-file traceability.</p>
+</ul>
+</section></main>
+  </div>
+  <footer><div class="shell">Generated from the adjacent Markdown source. Ledger product exploration, 2026-08-30.</div></footer>
+</body>
+</html>

@@ -1,9 +1,16 @@
 import { readFile, stat as statFile } from "node:fs/promises";
 import path from "node:path";
+import { readUtf8FileLimited } from "./boundedFile.js";
 import { isCoveragePattern } from "./coverage.js";
 import { normalizeDocument, normalizePath } from "./documents.js";
 import { extractBullets, getSectionBody } from "./query.js";
-import { applyFileTransaction } from "./fileTransaction.js";
+import {
+  applyFileTransaction,
+  ConcurrentFileChangeError,
+  hashFileContent,
+  type LedgerFileChange,
+} from "./fileTransaction.js";
+import { LedgerError } from "./machine.js";
 import { renderStaticReaderHtml } from "./renderHtml.js";
 import type {
   LedgerIssue,
@@ -143,7 +150,7 @@ export interface RenderStaticReaderResult {
   readonly budget: LedgerRenderBudgetResult;
 }
 
-export type LedgerRenderArtifactKind = "html" | "search-index" | "graph";
+export type LedgerRenderArtifactKind = "html" | "search-index" | "graph" | "sources";
 
 export interface LedgerRenderArtifact {
   readonly kind: LedgerRenderArtifactKind;
@@ -161,6 +168,23 @@ export interface LedgerRenderBudgetResult {
   readonly maxWriteMs: number;
   readonly artifacts: readonly LedgerRenderArtifact[];
 }
+
+interface LedgerSourceManifestEntry {
+  readonly href: string;
+  readonly hash: string;
+  readonly bytes: number;
+}
+
+interface LedgerSourceManifestState {
+  readonly content?: string;
+  readonly hash: string | null;
+  readonly sources: readonly LedgerSourceManifestEntry[];
+}
+
+const sourceManifestHref = "sources/.ledger-manifest.json";
+const sourceHashPattern = /^[a-f0-9]{64}$/;
+const generatedSourceHrefPattern =
+  /^sources\/[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}-[a-f0-9]{16}\.md$/;
 
 export function buildStaticReaderModel(
   workspace: LedgerWorkspace,
@@ -183,7 +207,7 @@ export function buildStaticReaderModel(
       const rendered: LedgerRenderedDocument = {
         ...normalized,
         source: document.raw,
-        sourceHref: sourceHref(workspace, document.relativePath),
+        sourceHref: sourceHref(normalized.id, document.relativePath),
         summary: compactSection(getSectionBody(document, "Summary")),
         why: compactSection(getSectionBody(document, "Why")),
         publicNotes: extractBullets(getSectionBody(document, "Public Notes")),
@@ -245,10 +269,12 @@ export async function writeStaticReader(
   const html = renderStaticReaderHtml(model, { iconSvg: await readIconSvg() });
   const searchIndex = `${JSON.stringify(serializedSearchIndex(model), null, 2)}\n`;
   const graph = `${JSON.stringify(model.graph, null, 2)}\n`;
+  const sources = await sourceSidecars(workspace, model, outputDirectory);
   await applyFileTransaction(workspace, `render ${model.profile} reader`, [
     { path: normalizeOutputPath(workspace, outputPath), content: html },
     { path: normalizeOutputPath(workspace, searchIndexPath), content: searchIndex },
     { path: normalizeOutputPath(workspace, graphPath), content: graph },
+    ...sources,
   ]);
   const writeMs = Date.now() - startedAt;
   const budget = await checkRenderBudgets(workspace, writeMs, model.profile);
@@ -294,7 +320,7 @@ export async function checkRenderBudgets(
 ): Promise<LedgerRenderBudgetResult> {
   const outputDirectory = renderOutputDirectory(workspace, profile);
   const budgets = workspace.config.render.budgets;
-  const artifacts = await Promise.all([
+  const artifactChecks: Promise<LedgerRenderArtifact>[] = [
     renderArtifact(workspace, "html", path.join(outputDirectory, "index.html"), budgets.maxHtmlBytes),
     renderArtifact(
       workspace,
@@ -303,7 +329,11 @@ export async function checkRenderBudgets(
       budgets.maxSearchIndexBytes,
     ),
     renderArtifact(workspace, "graph", path.join(outputDirectory, "graph.json"), budgets.maxGraphBytes),
-  ]);
+  ];
+  if (profile === "internal") {
+    artifactChecks.push(renderSourcesArtifact(workspace, outputDirectory, budgets.maxTotalBytes));
+  }
+  const artifacts = await Promise.all(artifactChecks);
   const totalBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
   return {
     ok:
@@ -501,8 +531,244 @@ async function renderArtifact(
   };
 }
 
-function sourceHref(workspace: LedgerWorkspace, documentPath: string): string {
-  return normalizePath(path.posix.relative(workspace.config.render.output, documentPath));
+function sourceHref(id: string, documentPath: string): string {
+  const stem = id
+    .replace(/[^A-Za-z0-9._-]/g, "-")
+    .replace(/^\.+/, "")
+    .slice(0, 80) || "record";
+  const pathHash = hashFileContent(normalizePath(documentPath)).slice(0, 16);
+  return `sources/${stem}-${pathHash}.md`;
+}
+
+async function sourceSidecars(
+  workspace: LedgerWorkspace,
+  model: LedgerStaticReaderModel,
+  outputDirectory: string,
+): Promise<readonly LedgerFileChange[]> {
+  if (model.profile !== "internal") return [];
+  if (model.documents.length > workspace.config.limits.maxDocuments) {
+    throw new LedgerError(
+      "resource-limit-exceeded",
+      `Rendered sources exceed ${workspace.config.limits.maxDocuments} documents`,
+      { kind: "render-source-documents", limit: workspace.config.limits.maxDocuments },
+    );
+  }
+  let totalBytes = 0;
+  const sourceChanges: LedgerFileChange[] = [];
+  const sources = new Map<string, LedgerSourceManifestEntry>();
+  const sourceContents = new Map<string, string>();
+  for (const document of model.documents) {
+    const bytes = Buffer.byteLength(document.source, "utf8");
+    if (bytes > workspace.config.limits.maxDocumentBytes) {
+      throw new LedgerError(
+        "resource-limit-exceeded",
+        `${document.path}: rendered source exceeds ${workspace.config.limits.maxDocumentBytes} bytes`,
+        { kind: "render-source-bytes", limit: workspace.config.limits.maxDocumentBytes },
+      );
+    }
+    totalBytes += bytes;
+    if (totalBytes > workspace.config.limits.maxTotalDocumentBytes) {
+      throw new LedgerError(
+        "resource-limit-exceeded",
+        `Rendered sources exceed ${workspace.config.limits.maxTotalDocumentBytes} bytes`,
+        { kind: "render-source-total-bytes", limit: workspace.config.limits.maxTotalDocumentBytes },
+      );
+    }
+    const href = sourceHref(document.id, document.path);
+    if (sources.has(href)) {
+      throw new LedgerError(
+        "render-validation-failed",
+        `Multiple records resolve to the rendered source path ${href}`,
+        { path: href },
+      );
+    }
+    const hash = hashFileContent(document.source);
+    sources.set(href, { href, hash, bytes });
+    sourceContents.set(href, document.source);
+  }
+
+  const manifestPath = path.join(outputDirectory, sourceManifestHref);
+  const previous = await readSourceManifest(workspace, manifestPath);
+  const previousSources = new Map(previous.sources.map((source) => [source.href, source]));
+  for (const [href, content] of sourceContents) {
+    const sourcePath = path.join(outputDirectory, href);
+    const source = sources.get(href)!;
+    sourceChanges.push({
+      path: normalizeOutputPath(workspace, sourcePath),
+      content,
+      expectedHash: await activeSourceExpectedHash(
+        workspace,
+        sourcePath,
+        source.hash,
+        previous,
+        previousSources.get(href),
+      ),
+    });
+  }
+  for (const source of previous.sources) {
+    if (sources.has(source.href)) continue;
+    const sourcePath = path.join(outputDirectory, source.href);
+    let content: string;
+    try {
+      content = await readUtf8FileLimited(
+        sourcePath,
+        workspace.config.limits.maxDocumentBytes,
+        "rendered source",
+      );
+    } catch (error) {
+      if (isCode(error, "ENOENT")) continue;
+      throw error;
+    }
+    const normalizedPath = normalizeOutputPath(workspace, sourcePath);
+    if (hashFileContent(content) !== source.hash) {
+      throw new ConcurrentFileChangeError(normalizedPath);
+    }
+    sourceChanges.push({
+      path: normalizedPath,
+      delete: true,
+      expectedHash: source.hash,
+    });
+  }
+
+  const manifest = `${JSON.stringify({
+    schemaVersion: 1,
+    sources: [...sources.values()].sort((left, right) => left.href.localeCompare(right.href)),
+  }, null, 2)}\n`;
+  sourceChanges.push({
+    path: normalizeOutputPath(workspace, manifestPath),
+    content: manifest,
+    expectedHash: previous.hash,
+  });
+  return sourceChanges;
+}
+
+async function activeSourceExpectedHash(
+  workspace: LedgerWorkspace,
+  sourcePath: string,
+  nextHash: string,
+  manifest: LedgerSourceManifestState,
+  previous?: LedgerSourceManifestEntry,
+): Promise<string | null> {
+  if (!previous && manifest.hash !== null) return null;
+  let currentHash: string | null;
+  try {
+    currentHash = hashFileContent(
+      await readUtf8FileLimited(
+        sourcePath,
+        workspace.config.limits.maxDocumentBytes,
+        "rendered source",
+      ),
+    );
+  } catch (error) {
+    if (isCode(error, "ENOENT")) return null;
+    throw error;
+  }
+  const expectedHash = previous?.hash ?? nextHash;
+  if (currentHash !== expectedHash) {
+    throw new ConcurrentFileChangeError(normalizeOutputPath(workspace, sourcePath));
+  }
+  return currentHash;
+}
+
+async function readSourceManifest(
+  workspace: LedgerWorkspace,
+  manifestPath: string,
+): Promise<LedgerSourceManifestState> {
+  let content: string;
+  try {
+    content = await readUtf8FileLimited(
+      manifestPath,
+      workspace.config.limits.maxTotalDocumentBytes,
+      "rendered source manifest",
+    );
+  } catch (error) {
+    if (isCode(error, "ENOENT")) return { hash: null, sources: [] };
+    throw error;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    throw invalidSourceManifest(manifestPath, error);
+  }
+  if (parsed === null || typeof parsed !== "object") {
+    throw invalidSourceManifest(manifestPath);
+  }
+  const value = parsed as {
+    readonly schemaVersion?: unknown;
+    readonly sources?: unknown;
+  };
+  if (
+    value.schemaVersion !== 1 ||
+    !Array.isArray(value.sources) ||
+    value.sources.length > workspace.config.limits.maxDocuments
+  ) {
+    throw invalidSourceManifest(manifestPath);
+  }
+
+  const seen = new Set<string>();
+  const sources: LedgerSourceManifestEntry[] = [];
+  for (const item of value.sources) {
+    if (item === null || typeof item !== "object") throw invalidSourceManifest(manifestPath);
+    const source = item as Partial<LedgerSourceManifestEntry>;
+    if (
+      typeof source.href !== "string" ||
+      !generatedSourceHrefPattern.test(source.href) ||
+      typeof source.hash !== "string" ||
+      !sourceHashPattern.test(source.hash) ||
+      !Number.isSafeInteger(source.bytes) ||
+      (source.bytes ?? -1) < 0 ||
+      seen.has(source.href)
+    ) {
+      throw invalidSourceManifest(manifestPath);
+    }
+    seen.add(source.href);
+    sources.push({ href: source.href, hash: source.hash, bytes: source.bytes! });
+  }
+  return { content, hash: hashFileContent(content), sources };
+}
+
+async function renderSourcesArtifact(
+  workspace: LedgerWorkspace,
+  outputDirectory: string,
+  maxBytes: number,
+): Promise<LedgerRenderArtifact> {
+  const manifestPath = path.join(outputDirectory, sourceManifestHref);
+  const manifest = await readSourceManifest(workspace, manifestPath);
+  let bytes = manifest.content === undefined ? 0 : Buffer.byteLength(manifest.content, "utf8");
+  let complete = manifest.content !== undefined;
+  for (const source of manifest.sources) {
+    try {
+      const content = await readUtf8FileLimited(
+        path.join(outputDirectory, source.href),
+        workspace.config.limits.maxDocumentBytes,
+        "rendered source",
+      );
+      const sourceBytes = Buffer.byteLength(content, "utf8");
+      bytes += sourceBytes;
+      if (sourceBytes !== source.bytes || hashFileContent(content) !== source.hash) complete = false;
+    } catch (error) {
+      if (!isCode(error, "ENOENT")) throw error;
+      complete = false;
+    }
+  }
+  return {
+    kind: "sources",
+    path: normalizeOutputPath(workspace, path.join(outputDirectory, "sources")),
+    bytes,
+    maxBytes,
+    ok: complete && bytes <= maxBytes,
+  };
+}
+
+function invalidSourceManifest(manifestPath: string, cause?: unknown): LedgerError {
+  return new LedgerError(
+    "render-validation-failed",
+    `Invalid rendered source manifest: ${manifestPath}`,
+    { path: manifestPath },
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 function countFacet(values: readonly string[]): readonly LedgerFacet[] {

@@ -25,7 +25,7 @@ import {
   writeDocsRoutingFiles,
 } from "./docs.js";
 import { buildDocsImpact, writeDocsImpactReport } from "./docsImpact.js";
-import { getChangedFiles } from "./git.js";
+import { getChangedFiles, type GetChangedFilesOptions } from "./git.js";
 import { buildIndexes, explainFile, writeIndexes } from "./indexer.js";
 import {
   buildIntegrityReport,
@@ -104,12 +104,14 @@ const booleanFlags = new Set([
 const valueFlags = new Set([
   "area",
   "backlog",
+  "base",
   "budget",
   "date",
   "decision",
   "doc",
   "file",
   "host",
+  "head",
   "id",
   "kind",
   "limit",
@@ -136,6 +138,7 @@ export async function run(
       return 0;
     }
     validateParsedArgs(parsed);
+    validatePositionals(parsed);
 
     switch (parsed.command) {
       case "init": {
@@ -468,10 +471,11 @@ async function serveCommand(parsed: ParsedArgs, context: RunContext): Promise<nu
 }
 
 async function explainCommand(parsed: ParsedArgs, context: RunContext): Promise<number> {
-  const filePath = parsed.positionals[0];
-  if (!filePath) {
-    throw invalidArgument("Usage: ledger explain <path> [--json] [--agent]");
-  }
+  const filePath = requirePositionals(
+    parsed,
+    1,
+    "Usage: ledger explain <path> [--json] [--agent]",
+  )[0]!;
   const workspace = await findWorkspace(context.cwd);
   const documents = await readLedgerDocuments(workspace);
   const matches = explainFile(documents, filePath);
@@ -595,10 +599,11 @@ async function searchPacketCommand(parsed: ParsedArgs, context: RunContext): Pro
 }
 
 async function packetCommand(parsed: ParsedArgs, context: RunContext): Promise<number> {
-  const target = parsed.positionals[0];
-  if (!target) {
-    throw invalidArgument("Usage: ledger packet <path> [--json] [--write-report] [--budget <tokens>] [--limit <entries>]");
-  }
+  const target = requirePositionals(
+    parsed,
+    1,
+    "Usage: ledger packet <path> [--json] [--write-report] [--budget <tokens>] [--limit <entries>]",
+  )[0]!;
 
   const workspace = await findWorkspace(context.cwd);
   const result = await runLedgerPacketCommand(workspace, target, {
@@ -640,12 +645,11 @@ async function unreleasedCommand(parsed: ParsedArgs, context: RunContext): Promi
 }
 
 async function releaseCommand(parsed: ParsedArgs, context: RunContext): Promise<number> {
-  const version = parsed.positionals[0];
-  if (!version) {
-    throw invalidArgument(
-      "Usage: ledger release <version> [--include-unreleased] [--assign] [--status <status>] [--date <yyyy-mm-dd>] [--write] [--json]",
-    );
-  }
+  const version = requirePositionals(
+    parsed,
+    1,
+    "Usage: ledger release <version> [--include-unreleased] [--assign] [--status <status>] [--date <yyyy-mm-dd>] [--write] [--json]",
+  )[0]!;
 
   const workspace = await findWorkspace(context.cwd);
   const documents = await readLedgerDocuments(workspace);
@@ -723,13 +727,10 @@ async function productNoteCommand(parsed: ParsedArgs, context: RunContext): Prom
 
 async function migrateCommand(parsed: ParsedArgs, context: RunContext): Promise<number> {
   const subcommand = parsed.positionals[0];
-  if (subcommand !== "changelog") {
+  if (subcommand !== "changelog" || parsed.positionals.length !== 2) {
     throw invalidArgument("Usage: ledger migrate changelog <dir> [--dry-run] [--rewrite-docs] [--status <status>]");
   }
-  const sourceDir = parsed.positionals[1];
-  if (!sourceDir) {
-    throw invalidArgument("Usage: ledger migrate changelog <dir> [--dry-run] [--rewrite-docs] [--status <status>]");
-  }
+  const sourceDir = parsed.positionals[1]!;
   const workspace = await findWorkspace(context.cwd);
   const documents = await readLedgerDocuments(workspace);
   const result = await migrateChangelog(workspace, documents, sourceDir, {
@@ -759,6 +760,19 @@ async function migrateCommand(parsed: ParsedArgs, context: RunContext): Promise<
 }
 
 async function agentsCommand(parsed: ParsedArgs, context: RunContext): Promise<number> {
+  const role = flagValues(parsed, "role")[0];
+  if (
+    role !== undefined &&
+    role !== "contributor" &&
+    role !== "reviewer" &&
+    role !== "release" &&
+    role !== "migration" &&
+    role !== "conflict"
+  ) {
+    throw invalidArgument(
+      `Invalid agent role: ${role}. Expected contributor, reviewer, release, migration, or conflict.`,
+    );
+  }
   let project = "this project";
   let docsMode = "partial";
   try {
@@ -769,16 +783,15 @@ async function agentsCommand(parsed: ParsedArgs, context: RunContext): Promise<n
     // Keep the command useful before init.
   }
 
-  console.log(agentInstructions(project, docsMode, flagValues(parsed, "role")[0]));
+  console.log(agentInstructions(project, docsMode, role));
   return 0;
 }
 
 async function coverageCommand(parsed: ParsedArgs, context: RunContext): Promise<number> {
+  const changes = gitChangeOptions(parsed);
   const workspace = await findWorkspace(context.cwd);
   const documents = await readLedgerDocuments(workspace);
-  const result = await checkCoverage(workspace, documents, {
-    staged: hasFlag(parsed, "staged"),
-  });
+  const result = await checkCoverage(workspace, documents, changes);
 
   if (hasFlag(parsed, "json")) {
     printJsonSuccess("coverage", result);
@@ -805,10 +818,11 @@ async function coverageCommand(parsed: ParsedArgs, context: RunContext): Promise
 }
 
 async function ciCommand(parsed: ParsedArgs, context: RunContext): Promise<number> {
+  const changes = gitChangeOptions(parsed);
   const workspace = await findWorkspace(context.cwd);
   const documents = await readLedgerDocuments(workspace);
   const result = await runCiChecks(workspace, documents, {
-    staged: hasFlag(parsed, "staged"),
+    ...changes,
     currentOnly: hasFlag(parsed, "current-only"),
     validationBaseline: hasFlag(parsed, "no-baseline")
       ? undefined
@@ -1017,11 +1031,10 @@ async function docsMigrateCommand(context: RunContext): Promise<number> {
 }
 
 async function docsImpactCommand(parsed: ParsedArgs, context: RunContext): Promise<number> {
+  const changes = gitChangeOptions(parsed);
   const workspace = await findWorkspace(context.cwd);
   const documents = await readLedgerDocuments(workspace);
-  const changedFiles = await getChangedFiles(workspace.projectRoot, {
-    staged: hasFlag(parsed, "staged"),
-  });
+  const changedFiles = await getChangedFiles(workspace.projectRoot, changes);
   const impact = buildDocsImpact(workspace, documents, changedFiles);
   await writeDocsImpactReport(workspace, impact);
 
@@ -1097,6 +1110,19 @@ function numberFlag(parsed: ParsedArgs, flag: string): number | undefined {
   return parsedValue;
 }
 
+function gitChangeOptions(parsed: ParsedArgs): GetChangedFilesOptions {
+  const base = flagValues(parsed, "base")[0];
+  const head = flagValues(parsed, "head")[0];
+  const staged = hasFlag(parsed, "staged");
+  if (Boolean(base) !== Boolean(head)) {
+    throw invalidArgument("--base and --head must be provided together");
+  }
+  if (staged && base) {
+    throw invalidArgument("--staged cannot be combined with --base and --head");
+  }
+  return { staged, base, head };
+}
+
 function validateParsedArgs(parsed: ParsedArgs): void {
   const allowed = allowedFlags(parsed);
   if (!allowed) return;
@@ -1116,6 +1142,92 @@ function validateParsedArgs(parsed: ParsedArgs): void {
       throw invalidArgument(`--${flag} may only be provided once`);
     }
   }
+}
+
+function validatePositionals(parsed: ParsedArgs): void {
+  const noPositionals = new Set([
+    "init",
+    "adopt",
+    "validate",
+    "index",
+    "verify-integrity",
+    "render",
+    "serve",
+    "query",
+    "mcp",
+    "unreleased",
+    "agents",
+    "coverage",
+    "ci",
+    "doctor",
+    "metrics",
+    "stale",
+    "version",
+    "--version",
+    "-v",
+    "--help",
+    "-h",
+  ]);
+  if (parsed.command && noPositionals.has(parsed.command) && parsed.positionals.length > 0) {
+    throw invalidArgument(
+      `Unexpected positional argument for ${machineCommand(parsed)}: ${parsed.positionals[0]}`,
+    );
+  }
+
+  switch (parsed.command) {
+    case "explain":
+      requirePositionals(parsed, 1, "Usage: ledger explain <path> [--json] [--agent]");
+      return;
+    case "packet":
+      requirePositionals(
+        parsed,
+        1,
+        "Usage: ledger packet <path> [--json] [--write-report] [--budget <tokens>] [--limit <entries>]",
+      );
+      return;
+    case "release":
+      requirePositionals(
+        parsed,
+        1,
+        "Usage: ledger release <version> [--include-unreleased] [--assign] [--status <status>] [--date <yyyy-mm-dd>] [--write] [--json]",
+      );
+      return;
+    case "migrate":
+      if (parsed.positionals[0] === "changelog") {
+        requirePositionals(
+          parsed,
+          2,
+          "Usage: ledger migrate changelog <dir> [--dry-run] [--rewrite-docs] [--status <status>]",
+        );
+      }
+      return;
+    case "docs": {
+      const subcommand = parsed.positionals[0];
+      if (
+        subcommand === "audit" ||
+        subcommand === "check" ||
+        subcommand === "impact" ||
+        subcommand === "reconcile" ||
+        subcommand === "migrate"
+      ) {
+        requirePositionals(parsed, 1, `Usage: ledger docs ${subcommand}`);
+      }
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+function requirePositionals(
+  parsed: ParsedArgs,
+  count: number,
+  usage: string,
+): readonly string[] {
+  if (parsed.positionals.length !== count) {
+    throw invalidArgument(usage);
+  }
+  return parsed.positionals;
 }
 
 function allowedFlags(parsed: ParsedArgs): ReadonlySet<string> | undefined {
@@ -1141,8 +1253,8 @@ function allowedFlags(parsed: ParsedArgs): ReadonlySet<string> | undefined {
     "product-note": ["area", "tag", "status"],
     migrate: ["dry-run", "rewrite-docs", "status", "json"],
     agents: ["role"],
-    coverage: ["staged", "explain", "json"],
-    ci: ["staged", "current-only", "no-baseline", "json"],
+    coverage: ["staged", "base", "head", "explain", "json"],
+    ci: ["staged", "base", "head", "current-only", "no-baseline", "json"],
     doctor: ["no-baseline", "json"],
     metrics: ["json"],
     stale: ["current-only", "no-baseline", "check", "write-report", "json"],
@@ -1155,7 +1267,7 @@ function allowedFlags(parsed: ParsedArgs): ReadonlySet<string> | undefined {
   if (command === "docs") {
     const subcommand = parsed.positionals[0];
     if (subcommand === "classify") return new Set(["json"]);
-    if (subcommand === "impact") return new Set(["staged", "check", "json"]);
+    if (subcommand === "impact") return new Set(["staged", "base", "head", "check", "json"]);
     if (subcommand === "audit" || subcommand === "check" || subcommand === "reconcile" || subcommand === "migrate" || subcommand === undefined) {
       return new Set();
     }
@@ -1166,7 +1278,13 @@ function allowedFlags(parsed: ParsedArgs): ReadonlySet<string> | undefined {
 }
 
 function helpTopicForCommand(parsed: ParsedArgs): string {
-  return [parsed.command, ...parsed.positionals].filter(Boolean).join(" ");
+  if (parsed.command === "docs" && parsed.positionals[0]) {
+    return `docs ${parsed.positionals[0]}`;
+  }
+  if (parsed.command === "migrate" && parsed.positionals[0]) {
+    return `migrate ${parsed.positionals[0]}`;
+  }
+  return parsed.command ?? "";
 }
 
 function printValidation(errors: number, warnings: number): void {
@@ -1376,6 +1494,25 @@ Usage:
 
 Creates a product-note record for dogfood findings, product observations, or
 other feedback that should not be mixed into normal change receipts.`;
+    case "help":
+    case "--help":
+    case "-h":
+      return `Ledger help
+
+Usage:
+  ledger help [command]
+  ledger <command> --help
+
+Prints general help or focused help for a known command.`;
+    case "version":
+    case "--version":
+    case "-v":
+      return `Ledger version
+
+Usage:
+  ledger version
+
+Prints the installed Ledger version.`;
     case "migrate":
     case "migrate changelog":
       return `Ledger migrate changelog
@@ -1442,18 +1579,19 @@ characters from LEDGER_SERVE_TOKEN.`;
       return `Ledger coverage
 
 Usage:
-  ledger coverage [--staged] [--explain] [--json]
+  ledger coverage [--staged | --base <revision> --head <revision>] [--explain] [--json]
 
 Checks changed files against git.requireEntryFor and Ledger file coverage.
 --explain prints why each changed path is ignored, not required, covered, or
-missing coverage.`;
+missing coverage. --base and --head inspect their merge-base change range.`;
     case "ci":
       return `Ledger ci
 
 Usage:
-  ledger ci [--staged] [--current-only] [--no-baseline] [--json]
+  ledger ci [--staged | --base <revision> --head <revision>] [--current-only] [--no-baseline] [--json]
 
-Runs validation, docs audit, coverage, and docs impact as one CI-friendly check.`;
+Runs validation, docs audit, coverage, and docs impact as one CI-friendly check.
+--base and --head inspect their merge-base change range.`;
     case "conflict":
       return `Ledger conflict
 
@@ -1559,7 +1697,7 @@ Usage:
   ledger docs audit
   ledger docs check
   ledger docs classify [path...] [--json]
-  ledger docs impact [--staged] [--check] [--json]
+  ledger docs impact [--staged | --base <revision> --head <revision>] [--check] [--json]
   ledger docs reconcile
   ledger docs migrate`;
     case "docs audit":
@@ -1582,9 +1720,10 @@ Classifies docs paths as durable, routing, scratch, generated, or unknown.`;
       return `Ledger docs impact
 
 Usage:
-  ledger docs impact [--staged] [--check] [--json]
+  ledger docs impact [--staged | --base <revision> --head <revision>] [--check] [--json]
 
-Reports whether changed source files have an explicit docs impact.`;
+Reports whether changed source files have an explicit docs impact. --base and
+--head inspect their merge-base change range.`;
     case "docs reconcile":
       return `Ledger docs reconcile
 
@@ -1601,7 +1740,8 @@ Usage:
 
 Writes .ledger/reports/docs-migration.md with docs cleanup and organization
 guidance from the current docs audit.`;
-    default:
+    case undefined:
+    case "":
       return `Ledger
 
 Usage:
@@ -1618,8 +1758,8 @@ Usage:
   ledger verify-integrity [--check] [--json]
   ledger render [--profile <internal|public>] [--json]
   ledger serve [--host <host>] [--port <port>] [--profile <internal|public>] [--watch] [--expose]
-  ledger coverage [--staged] [--explain] [--json]
-  ledger ci [--staged] [--current-only] [--no-baseline] [--json]
+  ledger coverage [--staged | --base <revision> --head <revision>] [--explain] [--json]
+  ledger ci [--staged | --base <revision> --head <revision>] [--current-only] [--no-baseline] [--json]
   ledger doctor [--no-baseline] [--json]
   ledger metrics [--json]
   ledger stale [--current-only] [--no-baseline] [--check] [--write-report] [--json]
@@ -1637,7 +1777,7 @@ Usage:
   ledger docs audit
   ledger docs check
   ledger docs classify [path...] [--json]
-  ledger docs impact [--staged] [--check] [--json]
+  ledger docs impact [--staged | --base <revision> --head <revision>] [--check] [--json]
   ledger docs reconcile
   ledger docs migrate
 
@@ -1654,6 +1794,8 @@ Examples:
   ledger doctor
   ledger release v0.1.0 --include-unreleased
   ledger ci --json`;
+    default:
+      throw invalidArgument(`Unknown help topic: ${topic?.trim()}`);
   }
 }
 

@@ -9,7 +9,7 @@ describe("CLI help", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("ledger help [command]");
-    expect(result.stdout).toContain("ledger ci [--staged] [--current-only] [--no-baseline] [--json]");
+    expect(result.stdout).toContain("ledger ci [--staged | --base <revision> --head <revision>]");
     expect(result.stdout).toContain("ledger verify-integrity [--check] [--json]");
     expect(result.stdout).toContain("ledger render [--profile <internal|public>] [--json]");
     expect(result.stdout).toContain("ledger doctor [--no-baseline] [--json]");
@@ -24,6 +24,47 @@ describe("CLI help", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Ledger new");
     expect(result.stdout).toContain("--from-diff");
+  });
+
+  it("rejects unknown help topics", async () => {
+    for (const argv of [
+      ["help", "not-a-command"],
+      ["not-a-command", "--help"],
+      ["docs", "not-a-command", "--help"],
+    ]) {
+      const result = await captureRun(argv);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("Unknown help topic:");
+    }
+  });
+
+  it("prints help for commands even when their normal positionals are present", async () => {
+    const explain = await captureRun(["explain", "src/cli.ts", "--help"]);
+    const classify = await captureRun([
+      "docs",
+      "classify",
+      "docs/PRODUCT.md",
+      "docs/API.md",
+      "--help",
+    ]);
+
+    expect(explain.exitCode).toBe(0);
+    expect(explain.stdout).toContain("Ledger explain");
+    expect(classify.exitCode).toBe(0);
+    expect(classify.stdout).toContain("Ledger docs classify");
+  });
+
+  it("documents Git range flags for change-aware checks", async () => {
+    const coverage = await captureRun(["help", "coverage"]);
+    const ci = await captureRun(["help", "ci"]);
+    const docsImpact = await captureRun(["help", "docs", "impact"]);
+
+    for (const result of [coverage, ci, docsImpact]) {
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("--base <revision> --head <revision>");
+    }
   });
 
   it("prints doctor help", async () => {

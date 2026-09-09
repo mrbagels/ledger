@@ -1,0 +1,1002 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Engineering audit of Ledger, including verified fixes, remaining risks, evidence, and recommended sequence.">
+  <title>Ledger Engineering Audit</title>
+  <style>
+    :root {
+      --canvas: #f3f1eb;
+      --paper: rgba(255, 255, 252, .9);
+      --ink: #17201c;
+      --muted: #5d6862;
+      --line: rgba(23, 32, 28, .14);
+      --accent: #a9461e;
+      --accent-soft: #f4dfd3;
+      --positive: #176347;
+      --positive-soft: #dcece5;
+      --warn: #8a5b06;
+      --warn-soft: #f4ead1;
+      --risk: #9f3228;
+      --risk-soft: #f4dcda;
+      --blue: #225f75;
+      --shadow: 0 20px 64px rgba(42, 37, 29, .09);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --canvas: #111613;
+        --paper: rgba(25, 32, 28, .94);
+        --ink: #eef3ee;
+        --muted: #adb9b0;
+        --line: rgba(238, 243, 238, .16);
+        --accent: #ff9560;
+        --accent-soft: rgba(255, 149, 96, .14);
+        --positive: #82d8b4;
+        --positive-soft: rgba(68, 166, 121, .17);
+        --warn: #f0c46a;
+        --warn-soft: rgba(210, 155, 48, .17);
+        --risk: #ff8a7f;
+        --risk-soft: rgba(215, 74, 63, .17);
+        --blue: #81c9df;
+        --shadow: 0 26px 78px rgba(0, 0, 0, .24);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 2%, var(--accent-soft), transparent 30rem),
+        radial-gradient(circle at 88% 12%, var(--positive-soft), transparent 26rem),
+        var(--canvas);
+      line-height: 1.62;
+    }
+    a { color: inherit; }
+    a:focus-visible, button:focus-visible, summary:focus-visible {
+      outline: 3px solid var(--blue);
+      outline-offset: 3px;
+    }
+    .skip {
+      position: fixed;
+      z-index: 10;
+      top: 10px;
+      left: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      color: white;
+      background: #111;
+      transform: translateY(-160%);
+    }
+    .skip:focus { transform: translateY(0); }
+    .shell { width: min(1420px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 70px 0 52px; border-bottom: 1px solid var(--line); }
+    .eyebrow, .kicker {
+      color: var(--accent);
+      font-size: .74rem;
+      font-weight: 850;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { text-wrap: balance; }
+    h1 {
+      max-width: 1000px;
+      margin: 13px 0 18px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(3.2rem, 8vw, 7.5rem);
+      line-height: .92;
+      letter-spacing: -.05em;
+    }
+    .lede {
+      max-width: 850px;
+      margin: 0;
+      color: var(--muted);
+      font-size: clamp(1.02rem, 2vw, 1.3rem);
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--paper);
+      text-decoration: none;
+      font-weight: 760;
+      font-size: .88rem;
+    }
+    .button.primary { color: white; border-color: var(--accent); background: var(--accent); }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 38px;
+    }
+    .stat {
+      padding: 17px 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+    .stat strong { display: block; font-size: 1.55rem; letter-spacing: -.03em; }
+    .stat span { color: var(--muted); font-size: .8rem; }
+    .layout {
+      display: grid;
+      grid-template-columns: 238px minmax(0, 1fr);
+      gap: 52px;
+      padding: 42px 0 100px;
+    }
+    nav {
+      position: sticky;
+      top: 22px;
+      align-self: start;
+      display: grid;
+      gap: 4px;
+    }
+    nav small { margin: 0 0 9px 10px; color: var(--muted); }
+    nav a {
+      padding: 9px 10px;
+      border-radius: 8px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: .88rem;
+    }
+    nav a:hover { color: var(--ink); background: var(--accent-soft); }
+    main { min-width: 0; }
+    section { scroll-margin-top: 22px; margin-bottom: 82px; }
+    section > h2 {
+      margin: 6px 0 24px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2rem, 4vw, 3.7rem);
+      line-height: 1.02;
+      letter-spacing: -.035em;
+    }
+    .summary {
+      max-width: 940px;
+      padding: 28px 30px;
+      border-left: 5px solid var(--accent);
+      border-radius: 0 18px 18px 0;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+    .summary p { margin: 0 0 14px; }
+    .summary p:last-child { margin-bottom: 0; }
+    .callout {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border: 1px solid color-mix(in srgb, var(--positive) 35%, var(--line));
+      border-radius: 12px;
+      color: var(--positive);
+      background: var(--positive-soft);
+      font-weight: 720;
+    }
+    .cards { display: grid; gap: 14px; }
+    .card {
+      padding: 24px 26px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+    .card h3 { margin: 8px 0 10px; font-size: 1.3rem; line-height: 1.2; }
+    .card p { margin: 0; color: var(--muted); }
+    .card p + p { margin-top: 10px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .fixed { color: var(--positive); background: var(--positive-soft); }
+    .high { color: var(--risk); background: var(--risk-soft); }
+    .medium { color: var(--warn); background: var(--warn-soft); }
+    .design { color: var(--blue); background: var(--accent-soft); }
+    .risk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .risk-card {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--paper);
+    }
+    .risk-card h3 { margin: 9px 0 8px; font-size: 1.12rem; }
+    .risk-card p { margin: 0; color: var(--muted); font-size: .94rem; }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 730px; }
+    th, td { padding: 14px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th {
+      color: var(--muted);
+      font-size: .74rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+    code {
+      padding: .12rem .36rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--accent-soft);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: .86em;
+    }
+    .sequence { counter-reset: item; display: grid; gap: 13px; margin: 0; padding: 0; list-style: none; }
+    .sequence li {
+      position: relative;
+      min-height: 54px;
+      padding: 13px 16px 13px 64px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--paper);
+    }
+    .sequence li::before {
+      counter-increment: item;
+      content: counter(item);
+      position: absolute;
+      top: 11px;
+      left: 14px;
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: 50%;
+      color: white;
+      background: var(--accent);
+      font-weight: 850;
+    }
+    details.source {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--paper);
+    }
+    details.source summary {
+      cursor: pointer;
+      padding: 18px 20px;
+      font-weight: 800;
+    }
+    pre {
+      max-height: 75vh;
+      overflow: auto;
+      margin: 0;
+      padding: 22px;
+      border-top: 1px solid var(--line);
+      color: var(--ink);
+      background: color-mix(in srgb, var(--canvas) 82%, transparent);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font: .8rem/1.56 "SFMono-Regular", Consolas, monospace;
+      tab-size: 2;
+    }
+    footer { border-top: 1px solid var(--line); padding: 24px 0 44px; color: var(--muted); font-size: .84rem; }
+    @media (max-width: 920px) {
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .layout { grid-template-columns: 1fr; gap: 28px; }
+      nav { position: static; display: flex; overflow-x: auto; padding-bottom: 7px; }
+      nav small { display: none; }
+      nav a { flex: 0 0 auto; border: 1px solid var(--line); }
+    }
+    @media (max-width: 680px) {
+      header { padding-top: 48px; }
+      h1 { font-size: clamp(3rem, 18vw, 5rem); }
+      .stats, .risk-grid { grid-template-columns: 1fr; }
+      .summary, .card { padding: 22px 20px; }
+      .shell { width: min(100% - 22px, 1420px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+    @media print {
+      body { background: white; color: black; }
+      .skip, nav, .actions, details.source { display: none; }
+      .layout { display: block; }
+      .card, .summary, .table-wrap { box-shadow: none; break-inside: avoid; }
+      section { margin-bottom: 38px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to audit</a>
+  <header id="top">
+    <div class="shell">
+      <div class="eyebrow">Engineering audit · 30 August 2026</div>
+      <h1>Trust the checks. Preserve the memory.</h1>
+      <p class="lede">A full repository scan of Ledger, separating verified fixes from product choices, architectural investments, and follow-up risks.</p>
+      <div class="actions" aria-label="Document actions">
+        <a class="button primary" href="engineering-audit-2026-08-30.md">View Markdown</a>
+        <a class="button" href="engineering-audit-2026-08-30.md" download>Download Markdown</a>
+        <a class="button" href="#sequence">Jump to sequence</a>
+      </div>
+      <div class="stats" aria-label="Audit summary">
+        <div class="stat"><strong>7</strong><span>confirmed fix groups</span></div>
+        <div class="stat"><strong>36</strong><span>test files passing</span></div>
+        <div class="stat"><strong>0</strong><span>known audit vulnerabilities</span></div>
+        <div class="stat"><strong>117</strong><span>dogfood records inspected</span></div>
+      </div>
+    </div>
+  </header>
+  <div class="shell layout">
+    <nav aria-label="Audit sections">
+      <small>On this page</small>
+      <a href="#executive">Executive summary</a>
+      <a href="#fixed">Confirmed fixes</a>
+      <a href="#remaining">Remaining findings</a>
+      <a href="#organization">Organization</a>
+      <a href="#verification">Verification</a>
+      <a href="#sequence">Recommended sequence</a>
+      <a href="#markdown">Markdown source</a>
+    </nav>
+    <main id="content">
+      <section id="executive">
+        <div class="kicker">Outcome</div>
+        <h2>Healthy foundation, material correctness repairs.</h2>
+        <div class="summary">
+          <p>Ledger is unusually mature for a 0.3 product: it has a clear repository-native model, rich durable docs, 117 dogfood records, typed surfaces, public-profile isolation, defensive serving, atomic transactions, and broad tests.</p>
+          <p>The highest-risk finding was clean pull-request CI blindness. Coverage and docs impact inspected an empty working tree, while Git failures could look like a valid zero-change result. Explicit merge-base ranges, full checkout history, and typed operational failures now close that gap.</p>
+          <p>The next critical layer is provenance. The correct changed files are now found, but historical records can still satisfy a current pull request. Docs impact also lacks per-file evidence. Those changes need one coherent product design.</p>
+          <div class="callout">Implemented fixes are clearly separated from pending work. No major feature or refactor is treated as authorized by this audit.</div>
+        </div>
+      </section>
+
+      <section id="fixed">
+        <div class="kicker">Implemented</div>
+        <h2>Confirmed defects fixed</h2>
+        <div class="cards">
+          <article class="card">
+            <div class="meta"><span class="pill fixed">Fixed</span><span class="pill high">High severity</span></div>
+            <h3>Pull-request ranges and explicit Git failures</h3>
+            <p>Coverage, docs impact, and CI now accept paired base/head revisions, inspect a merge-base range, report both sides of renames, reject invalid runtime and CLI revisions or incompatible modes, and surface typed Git errors. GitHub Actions fetches full history and checks the pull-request SHA range.</p>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="pill fixed">Fixed</span><span class="pill medium">Medium severity</span></div>
+            <h3>Grouped-path retrieval</h3>
+            <p>Conflict and packet lookup now reuse the canonical matcher for exact, suffix, glob, prefix, and double-star path references. Records created from grouped diffs remain discoverable.</p>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="pill fixed">Fixed</span><span class="pill medium">Medium severity</span></div>
+            <h3>MCP tag parity</h3>
+            <p>The MCP query schema and dispatch now carry tag filters to the same document query path used by other surfaces.</p>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="pill fixed">Fixed</span><span class="pill medium">Medium severity</span></div>
+            <h3>Actionable reader source</h3>
+            <p>Internal records now link to confined deterministic Markdown sidecars with accessible download labels. A hash-bearing manifest enables transaction-safe stale-sidecar pruning, delete recovery, concurrency guards, and unrelated-file preservation.</p>
+            <p><strong>Budget truth:</strong> aggregate source bytes now count toward the render total. The real catalog is 73,552 bytes over its configured limit, so budget reconciliation remains explicit follow-up.</p>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="pill fixed">Fixed</span><span class="pill medium">Medium severity</span></div>
+            <h3>CLI input validation</h3>
+            <p>Unknown help topics, invalid agent roles, and unexpected positional arguments now fail instead of being silently accepted.</p>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="pill fixed">Fixed</span><span class="pill high">Security</span></div>
+            <h3>Dependency remediation</h3>
+            <p>Safe transitive lockfile updates remove the six identified advisories. The production high-severity audit now reports zero vulnerabilities.</p>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="pill fixed">Fixed</span><span class="pill medium">Reliability</span></div>
+            <h3>Stable test concurrency</h3>
+            <p>The default Vitest command caps parallel work at four workers. All 36 test files pass at the settled scan checkpoints without the timeout cluster seen under unbounded scheduling.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="remaining">
+        <div class="kicker">Pending review</div>
+        <h2>Remaining findings</h2>
+        <div class="risk-grid">
+          <article class="risk-card"><div class="meta"><span class="pill high">High</span><span class="pill design">Design needed</span></div><h3>Current-change provenance</h3><p>A historical path mention can satisfy coverage for a new pull request. Separate current receipt coverage from historical context.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill high">High</span><span class="pill design">Design needed</span></div><h3>Per-file docs impact</h3><p>One docs touch or declaration can satisfy an entire change set without mapping source files to a specific docs decision.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill high">Strategic</span><span class="pill design">Design needed</span></div><h3>Canonical operation registry</h3><p>Flags, help, positional rules, machine envelopes, MCP schemas, library operations, and docs live in parallel registries that can drift.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill high">Strategic</span><span class="pill design">Design needed</span></div><h3>Reader budget and scaling</h3><p>Accurate accounting places the internal output at 2,073,552 bytes, including 365,674 source bytes, against a 2,000,000-byte limit. Reconcile the limit now, then chunk before larger catalogs.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill medium">Medium</span><span class="pill design">Pending fix</span></div><h3>Missing supersession graph edges</h3><p>Normalized records and search carry supersedes links, while the relationship graph emits decision, backlog, and related record edges only.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill medium">Medium</span><span class="pill design">Design needed</span></div><h3>Retrieval contract breadth</h3><p>Path matching is aligned, but explain, conflict, packet, library, and MCP do not yet share one relationship-aware result contract.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill medium">Medium</span><span class="pill design">Design needed</span></div><h3>Search runtime parity</h3><p>Node and browser fuzzy scoring are separately implemented, while direct-file fallback can silently change relevance behavior.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill medium">Medium</span><span class="pill design">Small feature</span></div><h3>Watch feedback</h3><p>Watch mode rebuilds the reader but does not notify or refresh the open browser.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill medium">Medium</span><span class="pill design">Design needed</span></div><h3>Lifecycle authoring</h3><p>Backlog, decision, promotion, and status-aware readiness remain manual or structurally permissive.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill medium">Low</span><span class="pill design">UX review</span></div><h3>Reader semantics</h3><p>CSS-generated year labels, browser interaction coverage, and degraded-search announcements remain accessibility and polish opportunities.</p></article>
+          <article class="risk-card"><div class="meta"><span class="pill medium">Low</span><span class="pill design">Tooling</span></div><h3>Artifact convergence</h3><p>Doctor finds stale indexes, but users must still know which write commands safely refresh each generated artifact.</p></article>
+        </div>
+      </section>
+
+      <section id="organization">
+        <div class="kicker">Maintainability</div>
+        <h2>Large modules need deliberate seams, not a rewrite.</h2>
+        <div class="table-wrap" role="region" aria-label="Large module findings" tabindex="0">
+          <table>
+            <thead><tr><th>Module</th><th>Shape</th><th>Risk</th><th>Suggested seam</th></tr></thead>
+            <tbody>
+              <tr><td><code>src/cli.ts</code></td><td>About 1,830 lines</td><td>Parsing, help, validation, dispatch, handlers, output, and watch mode share a high-conflict file.</td><td>Operation registry plus feature-owned handlers.</td></tr>
+              <tr><td><code>src/renderAssets.ts</code></td><td>1,573 lines</td><td>Embedded CSS and JavaScript are hard to type, split, and exercise in a browser.</td><td>Typed browser modules with deterministic bundling.</td></tr>
+              <tr><td><code>src/fileTransaction.ts</code></td><td>709 lines</td><td>Journaling and recovery have a high correctness blast radius.</td><td>Explicit recovery state machine and failure-injection tests.</td></tr>
+              <tr><td><code>src/render.ts</code></td><td>822 lines</td><td>Domain projection, graph, sidecars, ownership, budgets, and writes evolve together.</td><td>Separate projections, export policy, and artifact orchestration.</td></tr>
+              <tr><td><code>src/config.ts</code></td><td>631 lines</td><td>Defaults, parsing, migration, and semantic policy share one boundary.</td><td>Split normalization from policy only when a feature requires it.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="verification">
+        <div class="kicker">Evidence</div>
+        <h2>Verification matrix</h2>
+        <div class="table-wrap" role="region" aria-label="Verification results" tabindex="0">
+          <table>
+            <thead><tr><th>Area</th><th>Evidence</th><th>Snapshot result</th></tr></thead>
+            <tbody>
+              <tr><td>Type safety</td><td><code>npm run typecheck</code></td><td>Pass after reader transaction and budget work</td></tr>
+              <tr><td>Tests</td><td><code>npm test</code></td><td>Pass at settled checkpoints; exact count follows final convergence</td></tr>
+              <tr><td>Git ranges</td><td>Git, coverage, CI, CLI, help, workflow tests</td><td>Pass</td></tr>
+              <tr><td>Grouped paths</td><td>Conflict and packet tests</td><td>Pass: 17 focused tests</td></tr>
+              <tr><td>MCP tags</td><td>MCP suite</td><td>Pass: 11 tests</td></tr>
+              <tr><td>Reader source lifecycle</td><td>Render, serve, and transaction tests</td><td>Pass for links, pruning, recovery, byte totals, concurrency, unrelated files, and public isolation</td></tr>
+              <tr><td>Dependency audit</td><td><code>npm audit --omit=dev --audit-level=high</code></td><td>Pass: zero vulnerabilities</td></tr>
+              <tr><td>Final convergence</td><td>Typecheck, build, full CI, pack, diff check, render, doctor, stale, metrics, integrity</td><td>Rerun after all parallel edits settle</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="sequence">
+        <div class="kicker">Recommended order</div>
+        <h2>Converge first, then strengthen provenance.</h2>
+        <ol class="sequence">
+          <li>Reconcile the intentional source-sidecar footprint with the internal budget, then run the complete repository gate.</li>
+          <li>Add the Ledger receipt and regenerate indexes, internal/public renders, health, stale, metrics, and integrity outputs.</li>
+          <li>Design current-change coverage and per-file docs-impact evidence as one Git-range-aware correctness slice.</li>
+          <li>Complete supersession graph coverage and a shared retrieval result contract with golden tests.</li>
+          <li>Create the canonical operation registry before expanding lifecycle authoring, progressive MCP, or provider integrations.</li>
+          <li>Move the reader toward a typed, chunked runtime before catalog growth exhausts the single-page budget.</li>
+        </ol>
+      </section>
+
+      <section id="markdown">
+        <div class="kicker">Portable source</div>
+        <h2>Embedded Markdown</h2>
+        <p>The complete editable source is included below so this audit remains readable even when separated from its companion file.</p>
+        <details class="source">
+          <summary>Show complete Markdown source</summary>
+          <pre id="markdown-source"># Ledger Engineering Audit
+
+Date: 2026-08-30  
+Status: Scan findings and verified fixes  
+Decision boundary: Implemented items below are confirmed defect or reliability fixes. Remaining items are findings for review, not implementation commitments.
+
+## Executive Summary
+
+Ledger has a strong foundation for a version 0.3 product. The repository has a
+clear product model, extensive durable documentation, a compact LLM routing
+entrypoint, 117 dogfood records, typed library and CLI surfaces, an isolated
+public render profile, defensive local serving, atomic file transactions, and a
+broad automated test suite.
+
+The scan found one high-risk CI correctness gap and several smaller parity and
+ergonomics defects. A clean pull-request checkout could report no working-tree
+changes, so Ledger coverage and docs-impact checks could pass without examining
+the pull request. Git inspection errors were also converted into an empty
+change set. Both are now corrected with explicit base and head ranges, full Git
+history in CI, merge-base diffing, and typed operational errors.
+
+Other implemented fixes align grouped-path retrieval, MCP tag filtering, reader
+source access and lifecycle safety, CLI input validation, dependency security,
+and test reliability. At this snapshot, the capped suite passes 196 tests across 36 files and the
+production dependency audit reports zero vulnerabilities.
+
+The most important remaining risks are not quick implementation details. They
+need product approval or an explicit design pass:
+
+1. Coverage for a new change can still be satisfied by any historical record
+   that mentions the path. It does not yet prove that the current change has a
+   current receipt.
+2. One docs touch or one docs-impact declaration can satisfy a whole change set.
+   Per-file traceability is not represented.
+3. CLI, browser, library, and MCP behavior is implemented in several parallel
+   registries and runtimes, which creates long-term contract drift.
+4. Accurate source-sidecar accounting places the current internal render at
+   2,073,552 bytes against its configured 2,000,000-byte budget. The budget now
+   tells the truth, and the expected limit or artifact strategy must be reconciled.
+
+Overall assessment: healthy and unusually well documented, with the immediate
+correctness defects addressed. The next phase should strengthen provenance and
+contract ownership before expanding the number of product surfaces.
+
+## Scope And Method
+
+### Scope inspected
+
+- Repository guidance: `AGENTS.md`, `README.md`, package metadata, build and CI
+  configuration, and `docs/llm/START_HERE.md`.
+- Durable product documentation: product, architecture, implementation plan,
+  roadmap, schema, API, and docs relationship guidance.
+- Product surfaces: CLI, exported library, MCP server, static reader, internal
+  and public render profiles, local server, Git integration, docs lifecycle,
+  transactions, indexes, integrity, conflict guidance, packets, search, and CI.
+- Implementation shape: all source modules, tests, workflow files, dependency
+  lock state, large modules, and cross-surface command/query contracts.
+- Dogfood state: 117 Ledger records, generated indexes, internal/public reader
+  output, health checks, stale checks, and performance metrics.
+
+### Method
+
+1. Followed the repository's LLM-first documentation route before source
+   inspection.
+2. Mapped documented workflows to CLI, library, MCP, GitHub Actions, reader,
+   and test implementations.
+3. Ran build, type, test, render, doctor, stale, audit, and artifact checks at
+   the narrowest useful scope, then expanded to the complete suite.
+4. Reproduced concrete gaps with focused tests before accepting fixes.
+5. Inspected the internal and public reader output, including source serving and
+   public-profile isolation.
+6. Separated confirmed defects from product proposals and architectural work
+   that requires review.
+
+### Snapshot facts
+
+| Signal | Evidence |
+| --- | --- |
+| Dogfood catalog | 117 records: 92 changes, 6 backlog items, 4 decisions, and 15 releases |
+| Automated suite | 36 test files, 196 tests passing with a four-worker cap |
+| Largest source modules | `src/cli.ts` 1,830 lines; `src/renderAssets.ts` 1,573; `src/fileTransaction.ts` 709; `src/render.ts` 822; `src/config.ts` 631 |
+| Dependency security | `npm audit --omit=dev --audit-level=high`: zero vulnerabilities |
+| Render scale | Internal output is 2,073,552 bytes, including 365,674 source-sidecar bytes, against a configured 2,000,000-byte total budget |
+| Documentation health | Eight durable docs, an LLM manifest and start page, zero missing references in the generated docs audit |
+
+## Confirmed Defects Fixed
+
+### 1. Pull-Request Range Inspection And Explicit Git Failures
+
+**Severity before fix:** High  
+**Status:** Implemented and tested
+
+**Observed failure:** `ledger ci`, `ledger coverage`, and `ledger docs impact`
+inspected staged or working-tree changes. A normal clean pull-request checkout
+therefore looked unchanged. The Git adapter also caught command errors and
+returned an empty list, making an operational failure indistinguishable from a
+valid zero-change result.
+
+**Fix:** The Git contract now accepts paired `base` and `head` revisions, uses a
+NUL-delimited rename-aware `git diff base...head`, validates revision input,
+rejects incompatible staged/range modes, and raises typed operational errors.
+Coverage, docs impact, CI, CLI help, architecture docs, implementation docs, and
+README workflow examples share the new range. GitHub Actions checks out full
+history and runs the range-aware Ledger check for pull requests.
+
+**User impact:** CI evaluates the committed pull-request change set and fails
+visibly when Git cannot be inspected. Local users can reproduce the exact range
+with `ledger ci --base &lt;revision&gt; --head &lt;revision&gt;`.
+
+**Evidence:** Focused Git, coverage, CI, CLI end-to-end, help, and workflow tests
+cover range behavior, rename-safe parsing, invalid combinations, error
+propagation, and GitHub workflow wiring.
+
+**Residual design gap:** A path is still considered covered when any historical
+record mentions it. Current-change provenance is listed in the high-severity
+remaining findings.
+
+### 2. Grouped-Path Retrieval Parity
+
+**Severity before fix:** Medium  
+**Status:** Implemented and tested
+
+**Observed failure:** Large-diff drafting can group files into references such
+as `src/features/**`, `prefix:src/features`, or `glob:src/**`. File explanation
+understood these coverage patterns, but conflict and packet retrieval relied on
+exact or suffix matching. A record created by Ledger could therefore disappear
+from later file-oriented guidance.
+
+**Fix:** Conflict target matching now reuses the canonical coverage-pattern
+matcher before retaining the existing exact and suffix behavior. Packet lookup
+inherits the correction through the shared conflict-target path.
+
+**User impact:** Conflict guidance and agent packets now find records created
+from grouped changes, regardless of whether the stored reference is exact,
+prefix-based, or glob-based.
+
+**Evidence:** Nine conflict tests and eight packet tests pass, including exact,
+suffix, `**`, `prefix:`, and `glob:` regression cases.
+
+### 3. MCP Tag Query Parity
+
+**Severity before fix:** Medium  
+**Status:** Implemented and tested
+
+**Observed failure:** CLI and library queries accepted tag filters, but the MCP
+query schema and execution path did not. Agents using MCP could not reproduce a
+supported terminal query.
+
+**Fix:** The MCP parsed argument type, input schema, and query dispatch now
+carry `tag` through to `queryDocuments`.
+
+**User impact:** A tag-filtered query has the same basic behavior in CLI,
+library, and MCP entry points.
+
+**Evidence:** The MCP suite passes 11 tests, including tag-filtered query input.
+
+### 4. Actionable Reader Markdown Source
+
+**Severity before fix:** Medium  
+**Status:** Implemented and tested
+
+**Observed failure:** The internal reader model computed `sourceHref`, but the
+UI rendered the source path as static text. Linking directly to source outside
+the render root would also conflict with the server's traversal protections.
+
+**Fix:** Internal renders create deterministic Markdown sidecars under the
+confined render root. The record panel exposes a real download link with an
+accessible label. A hash-bearing ownership manifest identifies generated
+sidecars; removal and rename pruning use the same optimistic file transaction
+as writes. The transaction journal now supports nullable next hashes for atomic
+deletion and crash recovery. Unrelated files are preserved, while aggregate
+source bytes are reported in `totalBytes` and checked by `maxTotalBytes`. Public
+renders remain isolated and contain only the public HTML, search index, and
+graph artifacts.
+
+**User impact:** Maintainers can download the exact source record from either a
+served reader or static output without weakening path confinement. Public
+release output does not expose internal Markdown records.
+
+**Evidence:** Render tests verify the deterministic source URL, exact served
+content, download name, ownership manifest, move/removal pruning, unrelated-file
+preservation, concurrent-change guards, aggregate byte totals, and absence of
+source sidecars from the public profile. Transaction tests cover committed
+deletes, rollback, and interrupted-delete recovery.
+
+**Operational follow-up:** Correct accounting reveals that the real 117-record
+internal output is 2,073,552 bytes, which is 73,552 bytes above the configured
+2,000,000-byte limit. This is now an accurate warning rather than hidden bytes.
+
+### 5. CLI Input Validation
+
+**Severity before fix:** Medium  
+**Status:** Implemented and tested
+
+**Observed failure:** Unknown help topics printed general help with a successful
+exit; invalid agent roles were accepted; and several commands silently ignored
+extra positional arguments.
+
+**Fix:** Help now rejects unknown topics, agent roles are checked against the
+supported set, and exact-arity commands reject missing or extra positionals.
+Multi-path commands such as conflict and classification preserve their intended
+behavior.
+
+**User impact:** Typos and malformed automation fail immediately with typed,
+actionable invalid-argument results instead of appearing successful.
+
+**Evidence:** CLI help and end-to-end suites cover invalid help topics, roles,
+extra arguments, and valid multi-positional commands.
+
+### 6. Dependency Vulnerability Remediation
+
+**Severity before fix:** High for affected transitive advisories  
+**Status:** Implemented and audited
+
+**Observed failure:** The lockfile resolved six known advisories, including four
+production-path findings.
+
+**Fix:** Safe transitive updates refreshed Hono, the Hono Node server, fast-uri,
+ip-address, nanoid, and PostCSS without changing the public direct-dependency
+contract.
+
+**User impact:** Published and development dependency trees no longer contain
+the identified advisories.
+
+**Evidence:** Both the full audit and the production high-severity audit report
+zero vulnerabilities at the scan snapshot.
+
+### 7. Stable Test Concurrency
+
+**Severity before fix:** Medium  
+**Status:** Implemented and tested
+
+**Observed failure:** Unbounded default Vitest parallelism produced clusters of
+five-second timeouts on this repository, despite the same tests completing
+quickly with bounded workers. That made the primary `npm run check` signal
+machine-dependent.
+
+**Fix:** The repository test script now runs Vitest with `--maxWorkers=4`.
+
+**User impact:** Local and CI verification has a stable resource envelope while
+remaining parallel.
+
+**Evidence:** The capped suite passes 196 tests in 36 files in about seven
+seconds on the scan environment.
+
+## Remaining Findings
+
+The following items are deliberately not described as completed work. Each
+needs product selection, architecture review, or additional implementation.
+
+### High Severity Or High Strategic Risk
+
+#### A. Current-Change Coverage Provenance
+
+**Approval/design needed:** Yes  
+**Why it matters:** Range-aware Git inspection now finds the correct changed
+paths, but coverage searches the whole historical catalog. A years-old record
+can satisfy a new pull request that lacks a current receipt.
+
+**Recommended direction:** Bind coverage to the entries added or changed in the
+selected range, then use history only as context. Report current receipt,
+historical context, and missing coverage as separate states. This is the next
+correctness layer for trustworthy PR enforcement.
+
+#### B. Per-File Docs-Impact Traceability
+
+**Approval/design needed:** Yes  
+**Why it matters:** One changed docs file, one Ledger entry with docs references,
+or one reviewed docs-impact declaration can satisfy all source files in the
+change set. The result records that the change considered docs, but not which
+source surface maps to which docs decision.
+
+**Recommended direction:** Add per-file or grouped-path impact decisions with
+reason and evidence. Preserve a convenient project-level declaration for small
+changes, but expose exactly what it covers.
+
+#### C. Canonical Operation And Contract Registry
+
+**Approval/design needed:** Yes  
+**Why it matters:** Command names, flags, help, positional rules, machine
+envelopes, MCP schemas, library operations, and documentation are maintained in
+separate places. The tag and input-validation defects are examples of this
+drift.
+
+**Recommended direction:** Define each operation once with arguments, effects,
+result schema, limits, aliases, and availability by surface. Generate or adapt
+CLI help, validation, MCP schemas, and docs tables from that contract.
+
+#### D. Reader Budget Reconciliation And Scaling Before Catalog Growth
+
+**Approval/design needed:** Yes  
+**Why it matters:** Accurate accounting places the current 117-record internal
+output at 2,073,552 bytes, including 365,674 bytes of source sidecars, against a
+2,000,000-byte budget. A single HTML page also embeds about 1,573 lines of CSS
+and browser JavaScript. Continued catalog growth will pressure load time, render
+budgets, reviewability, and browser test coverage.
+
+**Recommended direction:** First decide whether the intentional internal source
+export justifies a modest explicit budget increase. Then adopt lazy record
+detail chunks, a versioned manifest, sharded search/graph artifacts, and a typed
+browser-runtime build before continued catalog growth. Keep the single-file path
+for small catalogs if it remains useful.
+
+### Medium Severity Correctness And Integration Gaps
+
+#### E. Relationship Graph Omits Supersession Edges
+
+**Approval/design needed:** Small product confirmation  
+**Finding:** Supersession is searchable and displayed in record details, but
+`buildRelationshipGraph` emits decision, backlog, and related record edges only.
+Graph consumers receive an incomplete relationship model.
+
+**Next step:** Add a typed `supersedes` edge and golden artifact coverage, then
+define how consumers should render direction and transitive supersession.
+
+#### F. Explain And Packet Contract Breadth
+
+**Approval/design needed:** Yes  
+**Finding:** Human-facing explain output is narrower than the task workflow
+described in the product documentation. Retrieval surfaces do not yet share one
+relationship-aware result contract, even after path matching is corrected.
+
+**Next step:** Define a common retrieval model for exact matches, patterns,
+decisions, backlog, supersession, invariants, verification, conflict guidance,
+and provenance. Adapt CLI, packet, conflict, library, and MCP to it.
+
+#### G. Browser And Node Search Parity
+
+**Approval/design needed:** Yes  
+**Finding:** Search weights and fuzzy scoring are implemented separately in
+`src/search.ts` and the embedded browser runtime. Direct-file fallback uses a
+different data path and can change relevance silently if the sidecar fails.
+
+**Next step:** Publish a versioned ranking contract or generated runtime,
+exercise parity fixtures in both environments, and announce degraded fallback
+mode in the reader.
+
+#### H. Watch Mode Rebuilds Without Browser Notification
+
+**Approval/design needed:** Yes, but implementation can be small  
+**Finding:** `ledger serve --watch` rebuilds output and reports status in the
+terminal, but the open reader does not receive a reload or rebuild notification.
+
+**Next step:** Add a small same-origin event stream or polling status endpoint
+that preserves filters, record selection, and scroll position on refresh.
+
+#### I. Lifecycle Authoring And Readiness Are Incomplete
+
+**Approval/design needed:** Yes  
+**Finding:** Change and feedback authoring are first class, while backlog and
+decision creation and backlog promotion still require manual template work.
+Structural validation can also accept low-value placeholder prose at statuses
+where a record should be ready to land or release.
+
+**Next step:** Design `backlog new`, `decision new`, promotion, and status-aware
+readiness as one lifecycle rather than unrelated commands.
+
+### Low Severity Polish And Hygiene
+
+#### J. Documentation Command Drift
+
+**Approval/design needed:** No for correction, yes if retaining an alias  
+**Finding:** `docs/DOCS_RELATIONSHIP.md` and the roadmap still show
+`ledger docs impact --from-diff`, while the implemented model is working tree,
+staged, or explicit base/head range. The README and core architecture docs have
+been updated for range support, but this older terminology remains.
+
+**Next step:** Replace stale command examples or intentionally implement and
+document `--from-diff` as an alias with defined semantics.
+
+#### K. Reader Accessibility And Semantic Polish
+
+**Approval/design needed:** Yes for visible design changes  
+**Finding:** The reader already has solid landmarks, labels, dialog semantics,
+keyboard-focus targets, and a result status region. Remaining issues include
+CSS-generated year labels rather than semantic headings, limited browser-level
+interaction coverage, and no explicit degraded-search announcement. A formal
+WCAG contrast and keyboard audit has not yet been recorded.
+
+**Next step:** Add semantic year groups, automated keyboard and dialog-flow
+tests, reduced-motion checks, contrast fixtures, and screen-reader status tests.
+
+#### L. Index And Generated-Artifact Convergence
+
+**Approval/design needed:** No for targeted tooling  
+**Finding:** Doctor correctly reports stale indexes, but routine fixes still
+require users to know which write commands converge each generated artifact.
+
+**Next step:** Add a bounded `doctor --fix` or `refresh` workflow with preview,
+explicit ownership, and transaction-safe writes.
+
+## Organization And Maintainability Findings
+
+### Large modules
+
+| Module | Current shape | Risk | Suggested seam |
+| --- | --- | --- | --- |
+| `src/cli.ts` | About 1,830 lines covering parsing, validation, help, dispatch, handlers, watch mode, and output | Every new command touches a high-conflict file; rules can drift from handlers and docs | Extract an operation registry, shared argument validators, and feature-owned command handlers incrementally |
+| `src/renderAssets.ts` | 1,573 lines of embedded CSS and browser JavaScript | Browser behavior is difficult to type, unit test, and split for scaling | Move to typed source modules with a deterministic bundling step and browser-level tests |
+| `src/fileTransaction.ts` | 709 lines implementing optimistic writes/deletes, journaling, recovery, modes, and limits | High correctness blast radius; deletion support increases state transitions | Keep one transaction core, extract journal validation/recovery state transitions, and expand failure-injection tests |
+| `src/render.ts` | 822 lines combining models, projections, graph, sidecars, ownership, budgets, and writes | Artifact policy and domain projection can evolve independently but currently collide | Separate model building, graph/search projections, source export, and artifact-budget orchestration |
+| `src/config.ts` | 631 lines of defaults, parsing, migration, validation, and policy interpretation | New configuration can expand one already broad boundary | Split schema normalization from semantic policy validation only when the next config feature requires it |
+
+These are maintainability risks, not reasons for a broad rewrite. The safest
+sequence is to extract stable contracts while implementing approved features,
+with parity tests before moving behavior.
+
+### Documentation
+
+Strengths:
+
+- `docs/llm/START_HERE.md` and `manifest.json` provide a low-cost agent route.
+- Durable product, architecture, implementation, API, schema, and roadmap docs
+  are well connected.
+- The docs audit reports zero missing references and no unreferenced durable
+  documents.
+- README command and PR-range guidance was updated with the implementation.
+
+Gaps:
+
+- Some future-state prose reads like current command behavior, notably
+  `--from-diff` and broader explain/retrieval expectations.
+- Generated docs health proves reference integrity, not semantic agreement
+  between documentation and behavior.
+- A contract-generated command reference would reduce manual help and docs
+  synchronization work.
+
+### Developer experience
+
+Strengths:
+
+- Strict TypeScript, named modules, typed errors, package smoke testing, pinned
+  GitHub Actions, cross-platform Node 22/24 CI, and temp-workspace tests provide
+  a good baseline.
+- The four-worker cap makes the default test command dependable.
+
+Gaps:
+
+- Browser runtime interactions are mostly covered through generated output and
+  Node-side tests, not execution in a browser.
+- There is no reusable GitHub Action or Checks API reporter, so adopters must
+  reproduce checkout/range details correctly.
+- Write-capable automation is not yet available through a typed, policy-aware
+  MCP/editor lifecycle.
+
+## UX And Integration Findings
+
+| Surface | What works well | Remaining opportunity |
+| --- | --- | --- |
+| CLI | Broad workflow, human and JSON modes, typed errors, focused help | Generate argument/help contracts; add lifecycle authoring and actionable remediation |
+| Reader | Useful facets, command palette, record panel, internal/public profiles, source download | Live reload, search parity, semantic year groups, relationship navigation, scaling |
+| MCP | Eight bounded read-oriented tools, machine envelopes, tag parity restored | Structured content/output schemas, pagination/detail levels, safe write operations |
+| Git and CI | Working/staged modes plus explicit PR range, rename-safe parsing, cross-platform workflow | Current-change provenance, reusable action, provider annotations |
+| Docs | Rich durable model and automated routing/audit | Per-file impact evidence, semantic behavior checks, command-reference generation |
+| Public publishing | Isolated sanitized profile with its own artifacts | Stable permalinks, feeds, metadata, branding, and deploy recipes |
+
+## Verification Matrix
+
+| Area | Verification | Result at audit snapshot |
+| --- | --- | --- |
+| Type safety | `npm run typecheck` | Pass after reader transaction and budget work |
+| Unit and integration tests | `npm test` | Pass: 36 files, 196 tests, four-worker cap |
+| Build | `npm run build` | Pass after reader transaction and budget work; rerun required after final merged edits |
+| Full repository gate | `npm run ci` | Final convergence step after the new Ledger receipt is added |
+| Git ranges | Focused Git, coverage, CI, CLI, and workflow tests | Pass |
+| Grouped paths | Conflict and packet tests | Pass: 17 focused tests |
+| MCP tag parity | MCP test suite | Pass: 11 tests |
+| Reader source lifecycle | Render, serve, and transaction tests | Pass for source link/content, manifest pruning, delete recovery, byte accounting, concurrency guards, unrelated-file preservation, and public isolation |
+| Dependency audit | `npm audit --omit=dev --audit-level=high` | Pass: zero vulnerabilities |
+| Formatting hygiene | `git diff --check` | Final convergence step |
+| Product health | render, doctor, stale, metrics, integrity checks | Baseline exercised; rerun after final render/index updates |
+
+The matrix distinguishes evidence already observed from checks that must be
+rerun after all parallel changes settle. A final green `npm run ci` is the
+release-quality convergence signal.
+
+## Recommended Next Sequence
+
+### Immediate convergence
+
+1. Reconcile the intentional source-sidecar footprint with the internal render
+   budget, either by an explicit near-term limit adjustment or by reducing the
+   artifact size.
+2. Add one Ledger receipt that covers the source, tests, docs, dependency, and
+   workflow changes from this scan.
+3. Run typecheck, the full capped test suite, build, Ledger CI, package dry run,
+   production audit, diff check, internal/public renders, doctor, stale, metrics,
+   and integrity verification.
+4. Regenerate indexes and confirm both reader profiles remain within their
+   explicit budgets and the public output contains no internal sources.
+
+### Next approved correctness slice
+
+1. Design current-change coverage provenance and per-file docs-impact evidence
+   together, because both depend on the same selected Git range and changed
+   Ledger entries.
+2. Complete the supersession graph edge and retrieval result contract with
+   golden tests.
+3. Correct stale documentation examples and generate command reference material
+   from a canonical operation definition.
+
+### Product and platform sequence
+
+1. Add status-aware record readiness and first-class backlog, decision, and
+   promotion authoring.
+2. Turn the reader watch loop into a live editing workflow and improve source,
+   relationship, and copy/share actions.
+3. Extract a typed browser runtime and introduce chunked artifacts before the
+   catalog crosses the current single-page budget.
+4. Add structured progressive MCP results, then policy-aware write operations.
+5. Build provider-neutral CI annotations and package the proven Git range logic
+   as a reusable integration.
+
+## Decision Log For This Audit
+
+- Confirmed defects and security updates were implemented because they correct
+  existing documented behavior or make current checks trustworthy.
+- Ambitious features and major refactors remain proposals. Listing them does
+  not authorize implementation.
+- Large-file counts are signals for incremental extraction, not a recommendation
+  to rewrite functioning subsystems.
+- The existing repository architecture, Markdown source of truth, public-profile
+  isolation, and transaction model should be preserved unless an approved design
+  explicitly changes them.</pre>
+        </details>
+      </section>
+    </main>
+  </div>
+  <footer><div class="shell">Ledger engineering audit. Verified fixes and review candidates, 2026-08-30.</div></footer>
+</body>
+</html>

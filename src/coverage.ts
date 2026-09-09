@@ -1,5 +1,5 @@
 import { normalizeDocument, normalizePath } from "./documents.js";
-import { getChangedFiles } from "./git.js";
+import { getChangedFiles, type GetChangedFilesOptions } from "./git.js";
 import type {
   LedgerCoverageFile,
   LedgerCoverageResult,
@@ -7,9 +7,7 @@ import type {
   ParsedLedgerDocument,
 } from "./types.js";
 
-export interface CheckCoverageOptions {
-  readonly staged?: boolean;
-}
+export interface CheckCoverageOptions extends GetChangedFilesOptions {}
 
 export async function checkCoverage(
   workspace: LedgerWorkspace,

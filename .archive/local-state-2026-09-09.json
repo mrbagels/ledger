@@ -1,0 +1,278 @@
+{
+  "working_head": "8de1c1b54c050b6869a6dbab7d7ba78a28f0b954",
+  "working_branch": "master",
+  "refs": [
+    {
+      "name": "refs/heads/ledger-2-hardening",
+      "object": "d1a4dbb47adafc40e5c6c7434c9e000978d25ac1",
+      "type": "commit"
+    },
+    {
+      "name": "refs/heads/master",
+      "object": "8de1c1b54c050b6869a6dbab7d7ba78a28f0b954",
+      "type": "commit"
+    },
+    {
+      "name": "refs/heads/next",
+      "object": "3d90ae8fd587e13b23909d1eb3511176d5e93ca0",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/MjBiODdkZTAtMmI5Yi00YWUzLTlkNjgtNTYwMDIwOWIxM2U3/turn/0",
+      "object": "9d43301d3dfa524fef9ce18ba81bec888910a936",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/MjBiODdkZTAtMmI5Yi00YWUzLTlkNjgtNTYwMDIwOWIxM2U3/turn/1",
+      "object": "08b5f0e724303c24fc6308d5c70116efd057d847",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/MjBiODdkZTAtMmI5Yi00YWUzLTlkNjgtNTYwMDIwOWIxM2U3/turn/2",
+      "object": "cb8b7ed8fa2081fc20ad3cd54996d738795b9871",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/MjBiODdkZTAtMmI5Yi00YWUzLTlkNjgtNTYwMDIwOWIxM2U3/turn/3",
+      "object": "bd0f11a437791436deb17d326cec4d04977cbe9b",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/MjBiODdkZTAtMmI5Yi00YWUzLTlkNjgtNTYwMDIwOWIxM2U3/turn/4",
+      "object": "e8ac29473ab68d6fdb2e8793f6a79a3fc02e162b",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/MjBiODdkZTAtMmI5Yi00YWUzLTlkNjgtNTYwMDIwOWIxM2U3/turn/5",
+      "object": "259a5d4142f93df39f0a9a6e736e5ca7db175aa2",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/0",
+      "object": "137ca93818ff5cdbe5188300bd50e8cfc8f3b577",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/1",
+      "object": "f30fb78a37402fb0a20bb9b5beb0091ec7189e7e",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/10",
+      "object": "3c60082c21afa8ce2f3ef693c4f1e97f7e08ad82",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/11",
+      "object": "416a1fb9852a43152a8aaeb58c6f6cddc15fe5ef",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/12",
+      "object": "1eb876762ef2ec6b4b987a8950a359b50acbdb32",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/13",
+      "object": "7d1b41f8b6e95c795acf766d96d0d50329f5d271",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/14",
+      "object": "013a6caa8f80c8c53cfa40792603ae298e72b30f",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/2",
+      "object": "4895432f162e750dabe45d3448fb8f9c43992bb0",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/3",
+      "object": "92d23db3a7a28cdb7bb7cd7fc9f332055280659c",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/4",
+      "object": "0c9368e5c2081f6a0b320063a2264b0c89fd4e4d",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/5",
+      "object": "f20d0fcfddf822f9e747ccbc3b7b12f4acde08bc",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/6",
+      "object": "4c785759436b756f3ef1fe1e67d53a62877621fd",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/7",
+      "object": "2f1d30b95b3a644ac8af9ea0224db9e1c5510c26",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/8",
+      "object": "145d86ee34b5abe849caa1acea2011429ef488f6",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/NTcyMzljYjEtODU5NS00NTY1LWFkMzktMmQ0NjJhYWQ1NzNj/turn/9",
+      "object": "5e4f434fff3be39e3bb2e61f58c0cb59dad181dd",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/ODM1N2NmMWYtODBkNS00YTMzLWEzODQtZDgwYmFiYzk0M2Fm/turn/0",
+      "object": "db44afa9bc37c5e8133bb76c0b9e731a01145a48",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/ODM1N2NmMWYtODBkNS00YTMzLWEzODQtZDgwYmFiYzk0M2Fm/turn/1",
+      "object": "c015c1d5229b7214cfffb61ac179cd9870b2d0c3",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/0",
+      "object": "578b09a1ed1b3f03213462ae610b3ba166f7d411",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/1",
+      "object": "9d5e76193446cfd24aa272a2870e6282dc67bbbd",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/10",
+      "object": "2a8e1699b4f1ea57489befddb04c81fd79ec91a5",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/2",
+      "object": "873d54b5d2c01334322f66bbfaaca5ce53bf654b",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/3",
+      "object": "5f349627e21ff7a8a9486eb003543843c30ca105",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/4",
+      "object": "6a94d093baa8c169d4c8e44553fbc0476f3284aa",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/5",
+      "object": "766f6c6e03ebfbfe5cef7d8ecea1a8cb6a53802f",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/6",
+      "object": "7e2f874111c0d4cac1146e093bf411052c4349f2",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/7",
+      "object": "4c5a1a06786681ebc3c3d99ab7e0a40bc8f4bdae",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/8",
+      "object": "08c30f782dcbc11bd580a1813283c040364ae199",
+      "type": "commit"
+    },
+    {
+      "name": "refs/lumen/checkpoints/YzRlYzk1MDMtYzUxOS00N2VkLTliZjQtOWZlZTJhYzkwOTdm/turn/9",
+      "object": "a4a47c3f4b5c994d8a8c0e1f443a62e832f84896",
+      "type": "commit"
+    },
+    {
+      "name": "refs/t3/checkpoints/ZmMzMWY4OTctMTY0MC00ZjUzLTk1MGEtYTQyNzYzMTVlNDFj/turn/0",
+      "object": "1ce7a0e377f9b1f67d22de796de3d57235b628c9",
+      "type": "commit"
+    },
+    {
+      "name": "refs/t3/checkpoints/ZmMzMWY4OTctMTY0MC00ZjUzLTk1MGEtYTQyNzYzMTVlNDFj/turn/1",
+      "object": "a49a7690d3f88e54e51fc83fc7d174026cb8f807",
+      "type": "commit"
+    },
+    {
+      "name": "refs/tags/v0.1.1",
+      "object": "2569aed8eaf4263bdeb6d63ab26c9e8540708131",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.10",
+      "object": "3d90ae8fd587e13b23909d1eb3511176d5e93ca0",
+      "type": "commit"
+    },
+    {
+      "name": "refs/tags/v0.1.12",
+      "object": "a700a579306511e94b26f36130d85e7801b49ac2",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.13",
+      "object": "45cba83bb3cede484c4e3d2321645858c935f430",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.2",
+      "object": "530441b5555e95508a07e0cb6d7a8eebd9a850f1",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.3",
+      "object": "811c80d52c13058bbc35a1fe47eec3dfdc13920a",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.4",
+      "object": "91a52aed6a35d94e3d49b8f4bd79cf435863d990",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.5",
+      "object": "2d2437c15c3233a54e94594875cce182b51b19e9",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.6",
+      "object": "c65d2398d490135b5b2708d519ef6064a1df38c4",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.7",
+      "object": "a7ce82d33629f3102fff0dbfc59e89b2fe3c46e1",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.8",
+      "object": "adcfebf8944626ac58b00bf575a1a086ab437890",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.1.9",
+      "object": "78c34c950337fecd54de540d550ba67d9766e205",
+      "type": "tag"
+    },
+    {
+      "name": "refs/tags/v0.2.0",
+      "object": "d1a4dbb47adafc40e5c6c7434c9e000978d25ac1",
+      "type": "commit"
+    },
+    {
+      "name": "refs/tags/v0.3.0",
+      "object": "d151ede0c87f6434b14be0ad4381419337ed432a",
+      "type": "commit"
+    },
+    {
+      "name": "refs/tags/v0.3.1",
+      "object": "9699e4f777d5cfa4d4f8a57c15e0bb4cd4d4a37b",
+      "type": "commit"
+    }
+  ],
+  "stashes": [],
+  "repository": "kylebegeman/ledger"
+}
